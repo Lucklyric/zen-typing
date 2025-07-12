@@ -227,14 +227,6 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
                 ))}
               </div>
               
-              {engine.state === TypingState.IN_PROGRESS && (
-                <div className="mt-8 text-sm text-gray-600 dark:text-gray-400">
-                  <div className="flex justify-center gap-8">
-                    <span>Press <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Esc</kbd> to reset</span>
-                    <span>Press <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+→</kbd> to skip word</span>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
