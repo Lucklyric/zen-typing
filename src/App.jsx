@@ -30,7 +30,7 @@ function App() {
         <header className="text-center mb-12">
           <div className="flex items-center justify-center gap-4 mb-4">
             <img 
-              src="/favicon.png" 
+              src={`${import.meta.env.BASE_URL}favicon.png`}
               alt="Zen Typing Logo" 
               className="w-16 h-16"
             />
