@@ -11,7 +11,7 @@ function App() {
   const [selectedText, setSelectedText] = useState(sampleTexts[0].text);
   const [showIPA, setShowIPA] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true); // Show history by default
   const [completedSessions, setCompletedSessions] = useState([]);
   const [activeSection, setActiveSection] = useState('practice'); // 'practice' or 'templates'
 

@@ -222,7 +222,7 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
                     typedChars={wordTypedChars[wordIndex] || ''}
                     errors={wordErrors[wordIndex] || []}
                     showIPA={showIPA}
-                    showSpace={wordIndex < words.length - 1} // Show space for all words except the last
+                    showSpace={wordIndex < words.length - 1 && wordIndex === currentWordIndex} // Show space only for current word (except last)
                   />
                 ))}
               </div>
