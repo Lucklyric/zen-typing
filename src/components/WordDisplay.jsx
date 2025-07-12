@@ -16,58 +16,54 @@ const WordDisplay = ({
     // Check if this character has an error
     const hasError = errors.some(err => err.charIndex === index);
     
-    // For completed words with errors
-    if (isCompleted) {
-      // Show what was actually typed (could be wrong)
-      const typedChar = index < typedChars.length ? typedChars[index] : char;
-      return (
-        <span 
-          key={index} 
-          className={
-            hasError
-              ? 'text-red-400 dark:text-red-500 bg-red-50 dark:bg-red-950 rounded px-0.5'
-              : 'text-gray-400 dark:text-gray-500'
-          }
-        >
-          {typedChar}
-        </span>
-      );
-    }
-
     // Check if this character has been typed
     const isTyped = index < typedChars.length;
     const isCurrentChar = isCurrentWord && index === currentCharIndex;
     
-    // For current character to be typed
-    if (isCurrentChar) {
-      return (
-        <span key={index} className="text-gray-900 dark:text-gray-100 bg-blue-100 dark:bg-blue-900 rounded px-0.5">
-          {char}
-        </span>
-      );
-    }
-    
-    // For characters not yet typed
-    if (!isTyped) {
-      return (
-        <span key={index} className="text-gray-700 dark:text-gray-300">
-          {char}
-        </span>
-      );
+    // Determine what character to display
+    let displayChar = char;
+    if (isCompleted && index < typedChars.length) {
+      displayChar = typedChars[index];
+    } else if (isTyped) {
+      displayChar = typedChars[index];
     }
 
-    // For typed characters - show what was actually typed
-    const typedChar = typedChars[index];
+    // Determine the visual state
+    let textColor = 'text-gray-700 dark:text-gray-300'; // untyped
+    let bgColor = '';
+    let textDecoration = '';
+
+    if (isCompleted) {
+      if (hasError) {
+        textColor = 'text-red-400 dark:text-red-500';
+        textDecoration = 'underline decoration-red-400 dark:decoration-red-500 decoration-2 underline-offset-2';
+      } else {
+        textColor = 'text-gray-400 dark:text-gray-500';
+      }
+    } else if (isCurrentChar) {
+      textColor = 'text-gray-900 dark:text-gray-100';
+      bgColor = 'bg-blue-100 dark:bg-blue-900';
+    } else if (isTyped) {
+      if (hasError) {
+        textColor = 'text-red-500 dark:text-red-400';
+        textDecoration = 'underline decoration-red-500 dark:decoration-red-400 decoration-2 underline-offset-2';
+      } else {
+        textColor = 'text-green-600 dark:text-green-400';
+      }
+    }
+
+    // Use fixed-width spans with consistent sizing
     return (
-      <span
-        key={index}
-        className={
-          hasError 
-            ? 'text-red-500 bg-red-100 dark:bg-red-900 rounded px-0.5' 
-            : 'text-green-600 dark:text-green-400'
-        }
+      <span 
+        key={index} 
+        className={`
+          inline-block w-[0.6em] text-center
+          ${textColor} ${bgColor} ${textDecoration}
+          transition-colors duration-150
+        `}
+        style={{ fontFamily: 'monospace' }}
       >
-        {typedChar}
+        {displayChar}
       </span>
     );
   };
@@ -77,52 +73,42 @@ const WordDisplay = ({
     const spaceTyped = typedChars.length === word.length;
     const hasSpaceError = errors.some(err => err.charIndex === word.length) || spaceError;
     
-    // For completed words with space error
+    let bgColor = '';
+    let borderStyle = '';
+    
     if (isCompleted && hasSpaceError) {
-      return (
-        <span className="w-2 inline-block bg-red-50 dark:bg-red-950 rounded mx-0.5"></span>
-      );
+      borderStyle = 'border-b-2 border-red-400 dark:border-red-500';
+    } else if (isCurrentSpace) {
+      bgColor = 'bg-blue-100 dark:bg-blue-900';
+    } else if (spaceTyped && hasSpaceError) {
+      borderStyle = 'border-b-2 border-red-500 dark:border-red-400';
     }
     
-    if (isCompleted) {
-      return <span className="w-2 inline-block"></span>;
-    }
-    
-    // Highlight space if it's the current character to type
-    if (isCurrentSpace) {
-      return (
-        <span className="w-3 inline-block bg-blue-100 dark:bg-blue-900 rounded mx-0.5 h-6" 
-              style={{ verticalAlign: 'bottom' }}>
-        </span>
-      );
-    }
-    
-    if (!spaceTyped) {
-      return <span className="w-2 inline-block"></span>;
-    }
-    
+    // Always render a fixed-width space container
     return (
-      <span
-        className={`w-2 inline-block ${
-          hasSpaceError 
-            ? 'bg-red-100 dark:bg-red-900 rounded mx-0.5' 
-            : ''
-        }`}
+      <span 
+        className={`
+          inline-block w-[0.6em] h-[1.2em]
+          ${bgColor} ${borderStyle}
+          transition-all duration-150
+        `}
+        style={{ fontFamily: 'monospace' }}
       >
+        &nbsp;
       </span>
     );
   };
 
   return (
-    <div className="inline-block align-top mr-3 mb-6">
+    <div className="inline-block align-top mb-6">
       <div className="relative">
-        <span className="text-xl font-mono">
+        <div className="text-xl leading-relaxed" style={{ fontFamily: 'monospace' }}>
           {word.split('').map(renderChar)}
           {showSpace && renderSpace()}
-        </span>
+        </div>
       </div>
       {showIPA && (
-        <div className="text-xs mt-2 font-mono text-center">
+        <div className="text-xs mt-2 text-center">
           {ipa ? (
             <span className="text-indigo-600 dark:text-indigo-400">/{ipa}/</span>
           ) : (

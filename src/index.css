@@ -39,6 +39,19 @@
   .glass {
     @apply bg-white/70 dark:bg-gray-800/70 backdrop-blur-md;
   }
+  
+  /* Blinking cursor animation */
+  .cursor-blink {
+    animation: blink 1s infinite;
+  }
+  
+  /* Fixed-width character containers */
+  .char-fixed {
+    display: inline-block;
+    width: 0.6em;
+    text-align: center;
+    position: relative;
+  }
 }
 
 @keyframes slideUp {
@@ -69,5 +82,14 @@
   to {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
   }
 }
