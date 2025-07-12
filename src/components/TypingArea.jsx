@@ -146,32 +146,56 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
   const words = engine.words;
   const currentWord = engine.getCurrentWord();
 
+  // Calculate progress
+  const totalChars = words.join(' ').length;
+  const typedChars = wordTypedChars[currentWordIndex]?.length || 0;
+  const completedChars = words.slice(0, currentWordIndex).join(' ').length + 
+                        (currentWordIndex > 0 ? currentWordIndex : 0); // Add spaces
+  const progress = ((completedChars + typedChars) / totalChars) * 100;
+
   return (
-    <div className="w-full max-w-4xl mx-auto p-8">
+    <div className="w-full">
+      {/* Progress Bar */}
+      <div className="mb-4">
+        <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+      
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 cursor-text"
+        className="cursor-text p-6 md:p-8 rounded-xl bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850 border border-gray-200 dark:border-gray-700"
         onClick={() => inputRef.current?.focus()}
       >
         <div className="text-center mb-8">
           {stats ? (
-            <div className="space-y-2 animate-fade-in">
-              <h2 className="text-3xl font-bold text-green-600">Complete!</h2>
-              <div className="flex justify-center gap-8 mt-4">
-                <div>
-                  <div className="text-2xl font-bold">{stats.netWPM}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">WPM</div>
+            <div className="space-y-4 animate-scale-in">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                  <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                  </svg>
                 </div>
-                <div>
-                  <div className="text-2xl font-bold">{stats.accuracy}%</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Accuracy</div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Excellent Work!</h2>
+              <div className="flex justify-center gap-4 md:gap-8 mt-6">
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4">
+                  <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{stats.netWPM}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">WPM</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-bold">{stats.duration}s</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Time</div>
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+                  <div className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.accuracy}%</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Accuracy</div>
+                </div>
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4">
+                  <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.duration}s</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Time</div>
                 </div>
               </div>
               <button
-                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="mt-6 px-8 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
                 onClick={() => {
                   engine.reset();
                   setCurrentWordIndex(0);
@@ -181,7 +205,7 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
                   setStats(null);
                 }}
               >
-                Try Again
+                Practice Again
               </button>
             </div>
           ) : (
@@ -215,6 +239,14 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
           )}
         </div>
 
+        {/* Mobile-friendly typing hint */}
+        {!stats && (
+          <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            <p className="hidden md:block">Start typing to begin • Backspace to correct</p>
+            <p className="md:hidden">Tap here and start typing</p>
+          </div>
+        )}
+        
         <input
           ref={inputRef}
           type="text"
