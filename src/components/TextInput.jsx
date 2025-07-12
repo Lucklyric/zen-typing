@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { customTextStorage } from '../utils/customTextStorage';
 
 const TextInput = ({ onTextSubmit }) => {
   const [text, setText] = useState('');
@@ -7,6 +8,8 @@ const TextInput = ({ onTextSubmit }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (text.trim()) {
+      // Save to history
+      customTextStorage.add(text.trim());
       onTextSubmit(text.trim());
       setText('');
       setIsOpen(false);

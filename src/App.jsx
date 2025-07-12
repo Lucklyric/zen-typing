@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import TypingArea from './components/TypingArea';
 import TextInput from './components/TextInput';
+import CustomTextHistory from './components/CustomTextHistory';
 import { sampleTexts } from './data/sampleTexts';
 import { audioManager } from './utils/audioManager';
 
@@ -8,6 +9,7 @@ function App() {
   const [selectedText, setSelectedText] = useState(sampleTexts[0].text);
   const [showIPA, setShowIPA] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [completedSessions, setCompletedSessions] = useState([]);
 
   const handleTextSelect = (text) => {
@@ -77,10 +79,26 @@ function App() {
 
           <div className="mt-12 mb-8">
             <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-4 text-center">Custom Text:</h2>
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <h2 className="text-xl font-semibold text-center">Custom Text:</h2>
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className={`px-3 py-1 rounded text-sm transition-colors ${
+                    showHistory 
+                      ? 'bg-indigo-500 text-white' 
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {showHistory ? 'Hide' : 'Show'} History
+                </button>
+              </div>
               <div className="text-center">
                 <TextInput onTextSubmit={handleTextSelect} />
               </div>
+              <CustomTextHistory 
+                isVisible={showHistory} 
+                onSelectText={handleTextSelect} 
+              />
             </div>
             
             <h2 className="text-xl font-semibold mb-4 text-center">Choose a Template:</h2>
