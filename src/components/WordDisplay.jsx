@@ -9,6 +9,7 @@ const WordDisplay = ({
   typedChars,
   errors,
   showIPA,
+  dictationMode = false,
   showSpace = false,
   spaceError = false
 }) => {
@@ -22,10 +23,20 @@ const WordDisplay = ({
     
     // Determine what character to display
     let displayChar = char;
+    
+    // Determine what character to display
     if (isCompleted && index < typedChars.length) {
       displayChar = typedChars[index];
     } else if (isTyped) {
       displayChar = typedChars[index];
+    } else if (dictationMode && !isTyped && !isCompleted) {
+      // In dictation mode, hide untyped characters
+      displayChar = '_'; // Show underscore for untyped characters
+    }
+    
+    // Special case for dictation mode hint: if first char has error, show the actual character
+    if (dictationMode && index === 0 && hasError && isCurrentWord && !isCompleted) {
+      displayChar = char; // Show the actual first character as a hint
     }
     
     // Make spaces visible when they're wrong
@@ -65,8 +76,21 @@ const WordDisplay = ({
       } else {
         textColor = 'text-green-600 dark:text-green-400';
       }
+    } else if (dictationMode && !isTyped) {
+      // In dictation mode, make hidden characters slightly visible
+      textColor = 'text-gray-400 dark:text-gray-600';
+    }
+    
+    // Special styling for dictation mode hint
+    if (dictationMode && index === 0 && hasError && isCurrentWord && !isCompleted && displayChar === char) {
+      textColor = 'text-amber-600 dark:text-amber-400';
+      bgColor = 'bg-amber-50 dark:bg-amber-900/20';
+      textDecoration = ''; // Remove any error underline for the hint
     }
 
+    // Add special animation class for hint
+    const isHint = dictationMode && index === 0 && hasError && isCurrentWord && !isCompleted && displayChar === char;
+    
     // Use fixed-width spans with consistent sizing
     return (
       <span 
@@ -74,7 +98,8 @@ const WordDisplay = ({
         className={`
           inline-block w-[0.6em] text-center
           ${textColor} ${bgColor} ${textDecoration}
-          transition-colors duration-150
+          transition-all duration-150
+          ${isHint ? 'animate-pulse rounded' : ''}
         `}
         style={{ fontFamily: 'monospace' }}
       >

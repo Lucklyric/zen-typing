@@ -4,7 +4,7 @@ import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { getIPA } from '../data/cmuIpaDict';
 import { audioManager } from '../utils/audioManager';
 
-const TypingArea = ({ text, onComplete, showIPA = false }) => {
+const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -231,6 +231,7 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
                     typedChars={wordTypedChars[wordIndex] || ''}
                     errors={wordErrors[wordIndex] || []}
                     showIPA={showIPA}
+                    dictationMode={dictationMode}
                     showSpace={wordIndex < words.length - 1} // Show space for all words except the last
                   />
                 ))}

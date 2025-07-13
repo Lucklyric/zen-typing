@@ -12,6 +12,7 @@ function App() {
   const [showIPA, setShowIPA] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(true); // Show history by default
+  const [dictationMode, setDictationMode] = useState(false);
   const [completedSessions, setCompletedSessions] = useState([]);
   const [activeSection, setActiveSection] = useState('practice'); // 'practice' or 'templates'
 
@@ -32,6 +33,11 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault();
         setShowHistory(prev => !prev);
+      }
+      // Ctrl/Cmd + D: Toggle dictation mode
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        setDictationMode(prev => !prev);
       }
     };
 
@@ -81,35 +87,56 @@ function App() {
             </div>
             
             <div className="flex items-center gap-3">
+              {/* IPA Toggle */}
               <button
                 onClick={() => setShowIPA(!showIPA)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all transform hover:scale-105 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   showIPA 
-                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/25' 
+                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
+                title="Toggle IPA (Ctrl+I)"
               >
-                {showIPA ? '🔤' : '🔡'} IPA
+                <span>{showIPA ? '🔤' : '🔡'}</span>
+                <span>IPA</span>
+                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
+                  ⌘I
+                </kbd>
               </button>
               
+              {/* Sound Toggle */}
               <button
                 onClick={toggleSound}
-                className={`px-4 py-2 rounded-lg font-medium transition-all transform hover:scale-105 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   soundEnabled 
-                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/25' 
+                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
+                title="Toggle Sound (Ctrl+S)"
               >
-                {soundEnabled ? '🔊' : '🔇'}
+                <span>{soundEnabled ? '🔊' : '🔇'}</span>
+                <span>Sound</span>
+                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
+                  ⌘S
+                </kbd>
               </button>
               
-              {/* Keyboard shortcuts hint */}
-              <div className="hidden lg:flex items-center text-xs text-gray-500 dark:text-gray-400">
-                <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">Ctrl+I</kbd>
-                <span className="mx-1">IPA</span>
-                <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded ml-2">Ctrl+S</kbd>
-                <span className="mx-1">Sound</span>
-              </div>
+              {/* Dictation Toggle */}
+              <button
+                onClick={() => setDictationMode(!dictationMode)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  dictationMode 
+                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' 
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                title="Toggle Dictation Mode (Ctrl+D)"
+              >
+                <span>{dictationMode ? '👁️' : '👁️‍🗨️'}</span>
+                <span>Dictation</span>
+                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
+                  ⌘D
+                </kbd>
+              </button>
             </div>
           </div>
         </div>
@@ -130,6 +157,7 @@ function App() {
               text={selectedText} 
               onComplete={handleComplete}
               showIPA={showIPA}
+              dictationMode={dictationMode}
             />
           </div>
 
