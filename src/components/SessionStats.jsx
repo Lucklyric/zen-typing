@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import StatsCard from './StatsCard';
 
-function SessionStats({ completedSessions }) {
+function SessionStats({ completedSessions, theme = 'normal' }) {
   const [stats, setStats] = useState({
     todayWPM: 0,
     todayAccuracy: 0,
@@ -98,45 +98,68 @@ function SessionStats({ completedSessions }) {
 
   return (
     <div className="mb-8">
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
-        Your Progress
+      <h2 className={`text-xl font-semibold mb-4 ${
+        theme === 'geek'
+          ? 'text-green-400 font-mono'
+          : 'text-gray-800 dark:text-gray-200'
+      }`}>
+        {theme === 'geek' ? '> PROGRESS.STATS' : 'Your Progress'}
       </h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatsCard
-          title="Today's Speed"
+          title={theme === 'geek' ? 'TODAY.SPEED' : "Today's Speed"}
           value={stats.todayWPM}
           unit="WPM"
           icon={icons.speed}
           color="indigo"
           trend={stats.improvementRate}
+          theme={theme}
         />
         <StatsCard
-          title="Accuracy"
+          title={theme === 'geek' ? 'ACCURACY.PCT' : 'Accuracy'}
           value={stats.todayAccuracy}
           unit="%"
           icon={icons.accuracy}
           color="green"
+          theme={theme}
         />
         <StatsCard
-          title="Day Streak"
+          title={theme === 'geek' ? 'DAY.STREAK' : 'Day Streak'}
           value={stats.streak}
-          unit="days"
+          unit={theme === 'geek' ? 'days' : 'days'}
           icon={icons.streak}
           color="purple"
+          theme={theme}
         />
         <StatsCard
-          title="Sessions Today"
+          title={theme === 'geek' ? 'SESSIONS.TODAY' : 'Sessions Today'}
           value={stats.sessionsToday}
           unit=""
           icon={icons.total}
           color="yellow"
+          theme={theme}
         />
       </div>
       
       {stats.bestWPM > 0 && (
-        <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Personal Best: <span className="font-bold text-indigo-600 dark:text-indigo-400">{stats.bestWPM} WPM</span>
+        <div className={`mt-4 p-4 rounded-lg ${
+          theme === 'geek'
+            ? 'bg-green-900/20 border border-green-500/30'
+            : 'bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20'
+        }`}>
+          <p className={`text-sm ${
+            theme === 'geek'
+              ? 'text-green-400/70 font-mono'
+              : 'text-gray-600 dark:text-gray-400'
+          }`}>
+            {theme === 'geek' ? '// PERSONAL.BEST: ' : 'Personal Best: '}
+            <span className={`font-bold ${
+              theme === 'geek'
+                ? 'text-green-400 font-mono'
+                : 'text-indigo-600 dark:text-indigo-400'
+            }`}>
+              {theme === 'geek' ? `[${stats.bestWPM}.WPM]` : `${stats.bestWPM} WPM`}
+            </span>
           </p>
         </div>
       )}

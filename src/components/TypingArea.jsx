@@ -4,7 +4,7 @@ import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { getIPA } from '../data/cmuIpaDict';
 import { audioManager } from '../utils/audioManager';
 
-const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }) => {
+const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, theme = 'normal' }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -191,45 +191,117 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
     <div className="w-full">
       {/* Progress Bar */}
       <div className="mb-4">
-        <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className={`h-2 rounded-full overflow-hidden ${
+          theme === 'geek'
+            ? 'bg-green-900/30 border border-green-500/20'
+            : 'bg-gray-200 dark:bg-gray-700'
+        }`}>
           <div 
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+            className={`h-full transition-all duration-300 ease-out ${
+              theme === 'geek'
+                ? 'bg-green-400 shadow-lg shadow-green-400/50'
+                : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+            }`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
       
       <div 
-        className="cursor-text p-6 md:p-8 rounded-xl bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850 border border-gray-200 dark:border-gray-700"
+        className={`cursor-text p-6 md:p-8 rounded-xl border ${
+          theme === 'geek'
+            ? 'bg-black border-green-500/30 font-mono'
+            : 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850 border-gray-200 dark:border-gray-700'
+        }`}
         onClick={() => inputRef.current?.focus()}
       >
         <div className="text-center mb-8">
           {stats ? (
             <div className="space-y-4 animate-scale-in">
               <div className="flex items-center justify-center mb-4">
-                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                  <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                  </svg>
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
+                  theme === 'geek'
+                    ? 'bg-green-900/30 border border-green-400'
+                    : 'bg-green-100 dark:bg-green-900/30'
+                }`}>
+                  {theme === 'geek' ? (
+                    <span className="text-2xl text-green-400 font-mono">[✓]</span>
+                  ) : (
+                    <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                    </svg>
+                  )}
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Excellent Work!</h2>
+              <h2 className={`text-2xl font-bold ${
+                theme === 'geek'
+                  ? 'text-green-400 font-mono'
+                  : 'text-gray-800 dark:text-gray-100'
+              }`}>
+                {theme === 'geek' ? '> MISSION.COMPLETE' : 'Excellent Work!'}
+              </h2>
               <div className="flex justify-center gap-4 md:gap-8 mt-6">
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4">
-                  <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{stats.netWPM}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">WPM</div>
+                <div className={`rounded-xl p-4 ${
+                  theme === 'geek'
+                    ? 'bg-green-900/20 border border-green-500/30 font-mono'
+                    : 'bg-indigo-50 dark:bg-indigo-900/20'
+                }`}>
+                  <div className={`text-3xl font-bold ${
+                    theme === 'geek'
+                      ? 'text-green-400 font-mono'
+                      : 'text-indigo-600 dark:text-indigo-400'
+                  }`}>{stats.netWPM}</div>
+                  <div className={`text-xs mt-1 ${
+                    theme === 'geek'
+                      ? 'text-green-400/70 font-mono'
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {theme === 'geek' ? 'WPM.RATE' : 'WPM'}
+                  </div>
                 </div>
-                <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
-                  <div className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.accuracy}%</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Accuracy</div>
+                <div className={`rounded-xl p-4 ${
+                  theme === 'geek'
+                    ? 'bg-green-900/20 border border-green-500/30 font-mono'
+                    : 'bg-green-50 dark:bg-green-900/20'
+                }`}>
+                  <div className={`text-3xl font-bold ${
+                    theme === 'geek'
+                      ? 'text-green-400 font-mono'
+                      : 'text-green-600 dark:text-green-400'
+                  }`}>{stats.accuracy}%</div>
+                  <div className={`text-xs mt-1 ${
+                    theme === 'geek'
+                      ? 'text-green-400/70 font-mono'
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {theme === 'geek' ? 'ACCURACY.PCT' : 'Accuracy'}
+                  </div>
                 </div>
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4">
-                  <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.duration}s</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Time</div>
+                <div className={`rounded-xl p-4 ${
+                  theme === 'geek'
+                    ? 'bg-green-900/20 border border-green-500/30 font-mono'
+                    : 'bg-purple-50 dark:bg-purple-900/20'
+                }`}>
+                  <div className={`text-3xl font-bold ${
+                    theme === 'geek'
+                      ? 'text-green-400 font-mono'
+                      : 'text-purple-600 dark:text-purple-400'
+                  }`}>{stats.duration}s</div>
+                  <div className={`text-xs mt-1 ${
+                    theme === 'geek'
+                      ? 'text-green-400/70 font-mono'
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {theme === 'geek' ? 'TIME.SEC' : 'Time'}
+                  </div>
                 </div>
               </div>
               <button
-                className="mt-6 px-8 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
+                className={`mt-6 px-8 py-3 rounded-lg font-medium transform hover:scale-105 transition-all duration-200 shadow-lg ${
+                  theme === 'geek'
+                    ? 'bg-green-500 text-black border border-green-400 hover:bg-green-400 font-mono'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600'
+                }`}
                 onClick={() => {
                   engine.reset();
                   setCurrentWordIndex(0);
@@ -239,12 +311,14 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
                   setStats(null);
                 }}
               >
-                Practice Again
+                {theme === 'geek' ? '> RESTART.SESSION' : 'Practice Again'}
               </button>
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap leading-relaxed items-start font-mono">
+              <div className={`flex flex-wrap leading-relaxed items-start ${
+                theme === 'geek' ? 'font-mono' : 'font-mono'
+              }`}>
                 {words.map((word, wordIndex) => (
                   <WordDisplay
                     key={wordIndex}
@@ -257,6 +331,7 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
                     errors={wordErrors[wordIndex] || []}
                     showIPA={showIPA}
                     dictationMode={dictationMode}
+                    theme={theme}
                     showSpace={wordIndex < words.length - 1} // Show space for all words except the last
                   />
                 ))}
@@ -268,9 +343,23 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
 
         {/* Mobile-friendly typing hint */}
         {!stats && (
-          <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            <p className="hidden md:block">Start typing to begin • Backspace to correct</p>
-            <p className="md:hidden">Tap here and start typing</p>
+          <div className={`mt-6 text-center text-sm ${
+            theme === 'geek'
+              ? 'text-green-400/70 font-mono'
+              : 'text-gray-500 dark:text-gray-400'
+          }`}>
+            <p className="hidden md:block">
+              {theme === 'geek' 
+                ? '// start.typing() -> begin.session | backspace() -> error.correct' 
+                : 'Start typing to begin • Backspace to correct'
+              }
+            </p>
+            <p className="md:hidden">
+              {theme === 'geek'
+                ? '// tap.screen -> init.session'
+                : 'Tap here and start typing'
+              }
+            </p>
           </div>
         )}
         
