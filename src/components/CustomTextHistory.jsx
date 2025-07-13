@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { customTextStorage } from '../utils/customTextStorage';
 
-function CustomTextHistory({ onSelectText, isVisible }) {
+function CustomTextHistory({ onSelectText, isVisible, theme = 'normal' }) {
   const [history, setHistory] = useState([]);
   const [expandedItems, setExpandedItems] = useState(new Set());
 
@@ -60,24 +60,43 @@ function CustomTextHistory({ onSelectText, isVisible }) {
   if (!isVisible) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mb-6">
+    <div className={`rounded-lg shadow-lg p-4 mb-6 ${
+      theme === 'geek'
+        ? 'bg-black border border-green-500/30'
+        : 'bg-white dark:bg-gray-800'
+    }`}>
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-          Custom Text History
+        <h3 className={`text-lg font-semibold ${
+          theme === 'geek'
+            ? 'text-green-400 font-mono'
+            : 'text-gray-800 dark:text-gray-200'
+        }`}>
+          {theme === 'geek' ? '> TEXT.HISTORY.LOG' : 'Custom Text History'}
         </h3>
         {history.length > 0 && (
           <button
             onClick={handleClearAll}
-            className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+            className={`text-sm ${
+              theme === 'geek'
+                ? 'text-red-400 hover:text-red-300 font-mono'
+                : 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300'
+            }`}
           >
-            Clear All
+            {theme === 'geek' ? '[DEL.ALL]' : 'Clear All'}
           </button>
         )}
       </div>
 
       {history.length === 0 ? (
-        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-          No custom texts yet. Start typing above!
+        <p className={`text-center py-8 ${
+          theme === 'geek'
+            ? 'text-green-400/60 font-mono'
+            : 'text-gray-500 dark:text-gray-400'
+        }`}>
+          {theme === 'geek' 
+            ? '// no.custom.texts.found -> add.text.above()' 
+            : 'No custom texts yet. Start typing above!'
+          }
         </p>
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -90,7 +109,11 @@ function CustomTextHistory({ onSelectText, isVisible }) {
             return (
               <div
                 key={item.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className={`border rounded-lg p-3 transition-colors ${
+                  theme === 'geek'
+                    ? 'border-green-500/30 hover:bg-green-900/10 hover:border-green-500/50'
+                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 min-w-0">
@@ -98,25 +121,51 @@ function CustomTextHistory({ onSelectText, isVisible }) {
                       onClick={() => toggleExpanded(item.id)}
                       className="w-full text-left"
                     >
-                      <p className="text-gray-800 dark:text-gray-200 break-words">
-                        {isExpanded ? item.text : preview}
+                      <p className={`break-words ${
+                        theme === 'geek'
+                          ? 'text-green-400 font-mono'
+                          : 'text-gray-800 dark:text-gray-200'
+                      }`}>
+                        {theme === 'geek' && !isExpanded ? `// ${preview}` : (isExpanded ? item.text : preview)}
                       </p>
                     </button>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
-                      <span>{formatDate(item.timestamp)}</span>
-                      <span>{item.wordCount} words</span>
+                    <div className={`flex items-center gap-4 mt-2 text-sm ${
+                      theme === 'geek'
+                        ? 'text-green-400/60 font-mono'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      <span>
+                        {theme === 'geek' 
+                          ? `[${formatDate(item.timestamp)}]` 
+                          : formatDate(item.timestamp)
+                        }
+                      </span>
+                      <span>
+                        {theme === 'geek' 
+                          ? `{${item.wordCount}.words}` 
+                          : `${item.wordCount} words`
+                        }
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={() => onSelectText(item.text)}
-                      className="px-3 py-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm"
+                      className={`px-3 py-1 text-sm ${
+                        theme === 'geek'
+                          ? 'bg-green-500 text-black border border-green-400 hover:bg-green-400 font-mono'
+                          : 'bg-indigo-500 text-white rounded hover:bg-indigo-600'
+                      }`}
                     >
-                      Use
+                      {theme === 'geek' ? '[USE]' : 'Use'}
                     </button>
                     <button
                       onClick={(e) => handleDelete(item.id, e)}
-                      className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                      className={`p-1 ${
+                        theme === 'geek'
+                          ? 'text-green-400/60 hover:text-red-400'
+                          : 'text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+                      }`}
                       title="Delete"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

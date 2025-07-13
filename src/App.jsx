@@ -13,6 +13,7 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(true); // Show history by default
   const [dictationMode, setDictationMode] = useState(false);
+  const [theme, setTheme] = useState('normal'); // 'normal' or 'geek'
   const [completedSessions, setCompletedSessions] = useState([]);
   const [activeSection, setActiveSection] = useState('practice'); // 'practice' or 'templates'
 
@@ -44,6 +45,12 @@ function App() {
         setDictationMode(prev => !prev);
         return;
       }
+      // Ctrl/Cmd + T: Toggle theme
+      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+        e.preventDefault();
+        setTheme(prev => prev === 'normal' ? 'geek' : 'normal');
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -70,23 +77,39 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 flex flex-col">
+    <div className={`min-h-screen flex flex-col ${
+      theme === 'geek' 
+        ? 'bg-black text-green-400 font-mono' 
+        : 'bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950'
+    }`}>
       {/* Fixed Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800">
+      <header className={`sticky top-0 z-50 backdrop-blur-md border-b ${
+        theme === 'geek'
+          ? 'bg-black/90 border-green-500/30 shadow-lg shadow-green-500/10'
+          : 'bg-white/80 dark:bg-gray-900/80 border-gray-200 dark:border-gray-800'
+      }`}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img 
                 src={`${import.meta.env.BASE_URL}favicon.png`}
                 alt="Zen Typing Logo" 
-                className="w-10 h-10"
+                className={`w-10 h-10 ${theme === 'geek' ? 'filter brightness-0 invert hue-rotate-90' : ''}`}
               />
               <div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-                  Zen Typing
+                <h1 className={`text-2xl font-bold ${
+                  theme === 'geek' 
+                    ? 'text-green-400 font-mono tracking-wider' 
+                    : 'text-gray-800 dark:text-gray-100'
+                }`}>
+                  {theme === 'geek' ? '> ZEN.TYPING' : 'Zen Typing'}
                 </h1>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Master typing with pronunciation
+                <p className={`text-xs ${
+                  theme === 'geek' 
+                    ? 'text-green-400/70 font-mono' 
+                    : 'text-gray-600 dark:text-gray-400'
+                }`}>
+                  {theme === 'geek' ? '// hack.your.typing.skills' : 'Master typing with pronunciation'}
                 </p>
               </div>
             </div>
@@ -95,51 +118,112 @@ function App() {
               {/* IPA Toggle */}
               <button
                 onClick={() => setShowIPA(!showIPA)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  showIPA 
-                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                  theme === 'geek'
+                    ? `font-mono border ${
+                        showIPA 
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                          : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                      }`
+                    : `rounded-lg ${
+                        showIPA 
+                          ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' 
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`
                 }`}
                 title="Toggle IPA (Ctrl+I)"
               >
-                <span>{showIPA ? '🔤' : '🔡'}</span>
-                <span>IPA</span>
-                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
-                  ⌘I
+                <span>{theme === 'geek' ? (showIPA ? '[+]' : '[ ]') : (showIPA ? '🔤' : '🔡')}</span>
+                <span>{theme === 'geek' ? 'IPA' : 'IPA'}</span>
+                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek' 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-black/10 dark:bg-white/10'
+                }`}>
+                  {theme === 'geek' ? 'CTRL+I' : '⌘I'}
                 </kbd>
               </button>
               
               {/* Sound Toggle */}
               <button
                 onClick={toggleSound}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  soundEnabled 
-                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                  theme === 'geek'
+                    ? `font-mono border ${
+                        soundEnabled 
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                          : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                      }`
+                    : `rounded-lg ${
+                        soundEnabled 
+                          ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`
                 }`}
                 title="Toggle Sound (Ctrl+S)"
               >
-                <span>{soundEnabled ? '🔊' : '🔇'}</span>
+                <span>{theme === 'geek' ? (soundEnabled ? '[♪]' : '[x]') : (soundEnabled ? '🔊' : '🔇')}</span>
                 <span>Sound</span>
-                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
-                  ⌘S
+                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek' 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-black/10 dark:bg-white/10'
+                }`}>
+                  {theme === 'geek' ? 'CTRL+S' : '⌘S'}
                 </kbd>
               </button>
               
               {/* Dictation Toggle */}
               <button
                 onClick={() => setDictationMode(!dictationMode)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  dictationMode 
-                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                  theme === 'geek'
+                    ? `font-mono border ${
+                        dictationMode 
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                          : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                      }`
+                    : `rounded-lg ${
+                        dictationMode 
+                          ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' 
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`
                 }`}
                 title="Toggle Dictation Mode (Ctrl+D)"
               >
-                <span>{dictationMode ? '👁️' : '👁️‍🗨️'}</span>
+                <span>{theme === 'geek' ? (dictationMode ? '[●]' : '[○]') : (dictationMode ? '👁️' : '👁️‍🗨️')}</span>
                 <span>Dictation</span>
-                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs bg-black/10 dark:bg-white/10 rounded">
-                  ⌘D
+                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek' 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-black/10 dark:bg-white/10'
+                }`}>
+                  {theme === 'geek' ? 'CTRL+D' : '⌘D'}
+                </kbd>
+              </button>
+              
+              {/* Theme Toggle */}
+              <button
+                onClick={() => setTheme(prev => prev === 'normal' ? 'geek' : 'normal')}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                  theme === 'geek'
+                    ? 'font-mono border bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
+                    : `rounded-lg ${
+                        theme === 'geek' 
+                          ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`
+                }`}
+                title="Toggle Theme (Ctrl+T)"
+              >
+                <span>{theme === 'geek' ? '[T]' : '🎨'}</span>
+                <span>{theme === 'geek' ? 'GEEK' : 'Normal'}</span>
+                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek' 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-black/10 dark:bg-white/10'
+                }`}>
+                  {theme === 'geek' ? 'CTRL+T' : '⌘T'}
                 </kbd>
               </button>
             </div>
@@ -151,11 +235,15 @@ function App() {
         <div className="max-w-7xl mx-auto">
           {/* Stats Dashboard */}
           {completedSessions.length > 0 && (
-            <SessionStats completedSessions={completedSessions} />
+            <SessionStats completedSessions={completedSessions} theme={theme} />
           )}
           
           {/* Main Typing Area */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 mb-8">
+          <div className={`rounded-2xl shadow-xl p-8 mb-8 ${
+            theme === 'geek'
+              ? 'bg-black border border-green-500/30 shadow-green-500/20'
+              : 'bg-white dark:bg-gray-800'
+          }`}>
 
             <TypingArea 
               key={selectedText}
@@ -163,32 +251,57 @@ function App() {
               onComplete={handleComplete}
               showIPA={showIPA}
               dictationMode={dictationMode}
+              theme={theme}
             />
           </div>
 
           {/* Content Selection with Tabs */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+          <div className={`rounded-2xl shadow-lg p-6 ${
+            theme === 'geek'
+              ? 'bg-black border border-green-500/30 shadow-green-500/20'
+              : 'bg-white dark:bg-gray-800'
+          }`}>
             {/* Tab Navigation */}
-            <div className="flex space-x-1 mb-6 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+            <div className={`flex space-x-1 mb-6 p-1 rounded-lg ${
+              theme === 'geek'
+                ? 'bg-green-900/20 border border-green-500/30'
+                : 'bg-gray-100 dark:bg-gray-700'
+            }`}>
               <button
                 onClick={() => setActiveSection('practice')}
-                className={`flex-1 px-4 py-2 rounded-md font-medium transition-all ${
-                  activeSection === 'practice'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                className={`flex-1 px-4 py-2 rounded-md transition-all ${
+                  theme === 'geek'
+                    ? `font-mono ${
+                        activeSection === 'practice'
+                          ? 'bg-green-900/50 border border-green-400 text-green-400 shadow-sm'
+                          : 'text-green-400/70 hover:text-green-400 hover:bg-green-900/30'
+                      }`
+                    : `font-medium ${
+                        activeSection === 'practice'
+                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`
                 }`}
               >
-                Practice Templates
+                {theme === 'geek' ? '[>] PRACTICE.TEMPLATES' : 'Practice Templates'}
               </button>
               <button
                 onClick={() => setActiveSection('custom')}
-                className={`flex-1 px-4 py-2 rounded-md font-medium transition-all ${
-                  activeSection === 'custom'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                className={`flex-1 px-4 py-2 rounded-md transition-all ${
+                  theme === 'geek'
+                    ? `font-mono ${
+                        activeSection === 'custom'
+                          ? 'bg-green-900/50 border border-green-400 text-green-400 shadow-sm'
+                          : 'text-green-400/70 hover:text-green-400 hover:bg-green-900/30'
+                      }`
+                    : `font-medium ${
+                        activeSection === 'custom'
+                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`
                 }`}
               >
-                Custom Text
+                {theme === 'geek' ? '[+] CUSTOM.TEXT' : 'Custom Text'}
               </button>
             </div>
 
@@ -200,24 +313,48 @@ function App() {
                     <button
                       key={text.id}
                       onClick={() => handleTextSelect(text.text)}
-                      className="group p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-750 rounded-xl border border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-lg transition-all duration-300 text-left transform hover:-translate-y-1"
+                      className={`group p-5 rounded-xl border transition-all duration-300 text-left transform hover:-translate-y-1 ${
+                        theme === 'geek'
+                          ? 'bg-black border-green-500/30 hover:border-green-400 hover:shadow-lg hover:shadow-green-400/20 font-mono'
+                          : 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-750 border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-lg'
+                      }`}
                     >
-                      <h3 className="font-semibold text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                        {text.title}
+                      <h3 className={`font-semibold transition-colors ${
+                        theme === 'geek'
+                          ? 'text-green-400 group-hover:text-green-300 font-mono'
+                          : 'text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+                      }`}>
+                        {theme === 'geek' ? `> ${text.title.toUpperCase()}` : text.title}
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">
-                        {text.text}
+                      <p className={`text-sm mt-2 line-clamp-2 ${
+                        theme === 'geek'
+                          ? 'text-green-400/70 font-mono'
+                          : 'text-gray-600 dark:text-gray-400'
+                      }`}>
+                        {theme === 'geek' ? `// ${text.text}` : text.text}
                       </p>
                       <div className="flex gap-2 mt-3">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                          text.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                          text.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                          'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        <span className={`text-xs px-2 py-1 font-medium ${
+                          theme === 'geek'
+                            ? `font-mono border ${
+                                text.difficulty === 'easy' ? 'border-green-500/50 text-green-400 bg-green-900/20' :
+                                text.difficulty === 'medium' ? 'border-yellow-500/50 text-yellow-400 bg-yellow-900/20' :
+                                'border-red-500/50 text-red-400 bg-red-900/20'
+                              }`
+                            : `rounded-full ${
+                                text.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                text.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                              }`
                         }`}>
-                          {text.difficulty}
+                          {theme === 'geek' ? `[${text.difficulty.toUpperCase()}]` : text.difficulty}
                         </span>
-                        <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full">
-                          {text.category}
+                        <span className={`text-xs px-2 py-1 ${
+                          theme === 'geek'
+                            ? 'font-mono border border-green-500/30 text-green-400/70 bg-green-900/10'
+                            : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full'
+                        }`}>
+                          {theme === 'geek' ? `{${text.category.toUpperCase()}}` : text.category}
                         </span>
                       </div>
                     </button>
@@ -226,24 +363,40 @@ function App() {
               ) : (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200">
-                      Add Your Own Text
+                    <h3 className={`text-lg font-medium ${
+                      theme === 'geek'
+                        ? 'text-green-400 font-mono'
+                        : 'text-gray-800 dark:text-gray-200'
+                    }`}>
+                      {theme === 'geek' ? '> CUSTOM.TEXT.INPUT' : 'Add Your Own Text'}
                     </h3>
                     <button
                       onClick={() => setShowHistory(!showHistory)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                        showHistory 
-                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' 
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      className={`px-3 py-1.5 text-sm font-medium transition-all ${
+                        theme === 'geek'
+                          ? `font-mono border ${
+                              showHistory 
+                                ? 'bg-green-900/50 border-green-400 text-green-400' 
+                                : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                            }`
+                          : `rounded-lg ${
+                              showHistory 
+                                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' 
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`
                       }`}
                     >
-                      {showHistory ? '📂' : '📁'} History
+                      {theme === 'geek' 
+                        ? (showHistory ? '[HIDE.LOG]' : '[SHOW.LOG]') 
+                        : (showHistory ? '📂 History' : '📁 History')
+                      }
                     </button>
                   </div>
-                  <TextInput onTextSubmit={handleTextSelect} />
+                  <TextInput onTextSubmit={handleTextSelect} theme={theme} />
                   <CustomTextHistory 
                     isVisible={showHistory} 
                     onSelectText={handleTextSelect} 
+                    theme={theme}
                   />
                 </div>
               )}
@@ -252,32 +405,71 @@ function App() {
 
           {/* Recent Sessions - Minimalist Display */}
           {completedSessions.length > 0 && (
-            <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-4 uppercase tracking-wide">
-                Recent Sessions
+            <div className={`mt-8 rounded-xl shadow-sm p-6 ${
+              theme === 'geek'
+                ? 'bg-black border border-green-500/30'
+                : 'bg-white dark:bg-gray-800'
+            }`}>
+              <h3 className={`text-sm font-medium mb-4 uppercase tracking-wide ${
+                theme === 'geek'
+                  ? 'text-green-400 font-mono'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}>
+                {theme === 'geek' ? '> SESSION.LOG' : 'Recent Sessions'}
               </h3>
               <div className="space-y-3">
                 {completedSessions.slice(-3).reverse().map((session, index) => (
                   <div 
                     key={index} 
-                    className="flex items-center justify-between py-3 px-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className={`flex items-center justify-between py-3 px-4 rounded-lg transition-colors ${
+                      theme === 'geek'
+                        ? 'bg-green-900/10 border border-green-500/20 hover:bg-green-900/20 hover:border-green-500/30'
+                        : 'bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
                   >
                     <div className="flex items-center gap-6">
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        <div className={`text-2xl font-bold ${
+                          theme === 'geek'
+                            ? 'text-green-400 font-mono'
+                            : 'text-gray-900 dark:text-gray-100'
+                        }`}>
                           {session.netWPM}
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">WPM</div>
+                        <div className={`text-xs ${
+                          theme === 'geek'
+                            ? 'text-green-400/70 font-mono'
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {theme === 'geek' ? 'WPM' : 'WPM'}
+                        </div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        <div className={`text-2xl font-bold ${
+                          theme === 'geek'
+                            ? 'text-green-400 font-mono'
+                            : 'text-gray-900 dark:text-gray-100'
+                        }`}>
                           {session.accuracy}%
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Accuracy</div>
+                        <div className={`text-xs ${
+                          theme === 'geek'
+                            ? 'text-green-400/70 font-mono'
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {theme === 'geek' ? 'ACC' : 'Accuracy'}
+                        </div>
                       </div>
                     </div>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className={`text-sm ${
+                      theme === 'geek'
+                        ? 'text-green-400/60 font-mono'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {theme === 'geek' 
+                        ? `[${new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}]`
+                        : new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      }
                     </span>
                   </div>
                 ))}
@@ -287,7 +479,7 @@ function App() {
         </div>
       </div>
       
-      <Footer />
+      <Footer theme={theme} />
     </div>
   );
 }
