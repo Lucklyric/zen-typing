@@ -123,9 +123,18 @@ const TypingArea = ({ text, onComplete, showIPA = false }) => {
           setWordErrors(prev => ({
             ...prev,
             [errorWordIndex]: [
-              ...(prev[errorWordIndex] || []),
+              ...(prev[errorWordIndex] || []).filter(err => err.charIndex !== errorCharIndex),
               { charIndex: errorCharIndex }
             ]
+          }));
+        } else {
+          // Clear error at this position if it was corrected
+          let errorWordIndex = prevWordIndex;
+          let errorCharIndex = prevCharIndex;
+          
+          setWordErrors(prev => ({
+            ...prev,
+            [errorWordIndex]: (prev[errorWordIndex] || []).filter(err => err.charIndex !== errorCharIndex)
           }));
         }
 

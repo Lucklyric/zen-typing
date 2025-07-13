@@ -1,3 +1,5 @@
+import { charactersMatch } from './characterNormalization';
+
 export const TypingState = {
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
@@ -75,7 +77,7 @@ export class TypingEngine {
       expectedChar = '';
     }
     
-    const isCorrect = key === expectedChar;
+    const isCorrect = charactersMatch(key, expectedChar);
 
     if (isCorrect) {
       this.correctKeystrokes++;

@@ -27,6 +27,21 @@ const WordDisplay = ({
     } else if (isTyped) {
       displayChar = typedChars[index];
     }
+    
+    // Make spaces visible when they're wrong
+    if (displayChar === ' ' && hasError) {
+      displayChar = '·'; // Middle dot to represent space
+    }
+    
+    // Show visual hint for special characters
+    if (hasError && isTyped) {
+      // For smart quotes, show what was typed
+      if ((char === '\u2018' || char === '\u2019') && typedChars[index] === "'") {
+        displayChar = typedChars[index];
+      } else if ((char === '\u201C' || char === '\u201D') && typedChars[index] === '"') {
+        displayChar = typedChars[index];
+      }
+    }
 
     // Determine the visual state
     let textColor = 'text-gray-700 dark:text-gray-300'; // untyped
@@ -70,31 +85,47 @@ const WordDisplay = ({
 
   const renderSpace = () => {
     const isCurrentSpace = isCurrentWord && currentCharIndex === word.length;
-    const spaceTyped = typedChars.length === word.length;
+    const spaceTyped = typedChars.length > word.length;
     const hasSpaceError = errors.some(err => err.charIndex === word.length) || spaceError;
     
+    // Get what was actually typed for the space position
+    const typedSpaceChar = typedChars.length > word.length ? typedChars[word.length] : '';
+    const isSpaceCharCorrect = typedSpaceChar === ' ';
+    
+    let textColor = 'text-gray-700 dark:text-gray-300';
     let bgColor = '';
-    let borderStyle = '';
+    let displayChar = '\u00A0'; // nbsp by default
     
     if (isCompleted && hasSpaceError) {
-      borderStyle = 'border-b-2 border-red-400 dark:border-red-500';
+      textColor = 'text-red-400 dark:text-red-500';
+      if (typedSpaceChar && typedSpaceChar !== ' ') {
+        displayChar = typedSpaceChar; // Show the wrong character
+      }
     } else if (isCurrentSpace) {
+      textColor = 'text-gray-900 dark:text-gray-100';
       bgColor = 'bg-blue-100 dark:bg-blue-900';
-    } else if (spaceTyped && hasSpaceError) {
-      borderStyle = 'border-b-2 border-red-500 dark:border-red-400';
+    } else if (spaceTyped) {
+      if (hasSpaceError || !isSpaceCharCorrect) {
+        textColor = 'text-red-500 dark:text-red-400';
+        if (typedSpaceChar && typedSpaceChar !== ' ') {
+          displayChar = typedSpaceChar; // Show the wrong character
+        }
+      } else {
+        textColor = 'text-green-600 dark:text-green-400';
+      }
     }
     
     // Always render a fixed-width space container
     return (
       <span 
         className={`
-          inline-block w-[0.6em] h-[1.2em]
-          ${bgColor} ${borderStyle}
+          inline-block w-[0.6em] h-[1.2em] text-center
+          ${textColor} ${bgColor}
           transition-all duration-150
         `}
         style={{ fontFamily: 'monospace' }}
       >
-        &nbsp;
+        {displayChar}
       </span>
     );
   };
