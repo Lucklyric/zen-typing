@@ -24,6 +24,12 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
       return;
     }
 
+    // Check for keyboard shortcuts and don't process them as typing input
+    if ((e.ctrlKey || e.metaKey)) {
+      // Let the shortcuts pass through but don't process as typing
+      return;
+    }
+
     if (e.key === 'Backspace') {
       const prevWordIndex = engine.currentWordIndex;
       const prevCharIndex = engine.currentCharIndex;
@@ -37,19 +43,38 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false }
         
         // Update typed characters - handle going back to previous word
         if (engine.currentWordIndex !== prevWordIndex) {
-          // We went back to previous word
+          // We went back to previous word - set typed chars to what was actually typed
+          const currentTypedText = engine.typedText;
+          let currentPos = 0;
+          const newWordTypedChars = {};
+          
+          // Rebuild word typed chars from engine's typed text
+          for (let i = 0; i <= engine.currentWordIndex; i++) {
+            const word = engine.words[i];
+            if (i < engine.currentWordIndex) {
+              // Complete previous words
+              const wordLength = word.length + 1; // +1 for space
+              newWordTypedChars[i] = currentTypedText.slice(currentPos, currentPos + wordLength);
+              currentPos += wordLength;
+            } else {
+              // Current word (partial)
+              newWordTypedChars[i] = currentTypedText.slice(currentPos);
+            }
+          }
+          
           setWordTypedChars(prev => ({
             ...prev,
-            [engine.currentWordIndex]: engine.getCurrentWord(),
-            [prevWordIndex]: ''
+            ...newWordTypedChars,
+            [prevWordIndex]: '' // Clear the word we left
           }));
+          
           // Clear errors for the word we left
           setWordErrors(prev => ({
             ...prev,
             [prevWordIndex]: []
           }));
         } else {
-          // Still in same word
+          // Still in same word - remove last character
           setWordTypedChars(prev => ({
             ...prev,
             [engine.currentWordIndex]: (prev[engine.currentWordIndex] || '').slice(0, -1)

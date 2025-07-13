@@ -19,25 +19,30 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Always handle shortcuts, but prevent default to stop character input
       // Ctrl/Cmd + I: Toggle IPA
       if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
         e.preventDefault();
         setShowIPA(prev => !prev);
+        return;
       }
       // Ctrl/Cmd + S: Toggle sound
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         toggleSound();
+        return;
       }
       // Ctrl/Cmd + H: Toggle history
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault();
         setShowHistory(prev => !prev);
+        return;
       }
       // Ctrl/Cmd + D: Toggle dictation mode
       if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
         e.preventDefault();
         setDictationMode(prev => !prev);
+        return;
       }
     };
 
