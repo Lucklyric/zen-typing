@@ -12,10 +12,21 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
   const [wordErrors, setWordErrors] = useState({});
   const [stats, setStats] = useState(null);
   const inputRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Auto-scroll to keep current word visible
+  useEffect(() => {
+    if (scrollContainerRef.current && currentWordIndex > 0) {
+      const currentWordElement = scrollContainerRef.current.querySelector(`[data-word-index="${currentWordIndex}"]`);
+      if (currentWordElement) {
+        currentWordElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [currentWordIndex]);
 
   const handleKeyDown = (e) => {
     e.preventDefault();
@@ -316,25 +327,33 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
             </div>
           ) : (
             <>
-              <div className={`flex flex-wrap leading-relaxed items-start ${
-                theme === 'geek' ? 'font-mono' : 'font-mono'
-              }`}>
-                {words.map((word, wordIndex) => (
-                  <WordDisplay
-                    key={wordIndex}
-                    word={word}
-                    ipa={getIPA(word)}
-                    currentCharIndex={wordIndex === currentWordIndex ? currentCharIndex : 0}
-                    isCurrentWord={wordIndex === currentWordIndex}
-                    isCompleted={wordIndex < currentWordIndex}
-                    typedChars={wordTypedChars[wordIndex] || ''}
-                    errors={wordErrors[wordIndex] || []}
-                    showIPA={showIPA}
-                    dictationMode={dictationMode}
-                    theme={theme}
-                    showSpace={wordIndex < words.length - 1} // Show space for all words except the last
-                  />
-                ))}
+              <div 
+                ref={scrollContainerRef}
+                className={`max-h-96 overflow-y-auto px-1 ${
+                  theme === 'geek' ? 'custom-scrollbar-geek' : 'custom-scrollbar'
+                }`}
+              >
+                <div className={`flex flex-wrap leading-relaxed items-start ${
+                  theme === 'geek' ? 'font-mono' : 'font-mono'
+                }`}>
+                  {words.map((word, wordIndex) => (
+                    <div key={wordIndex} data-word-index={wordIndex}>
+                      <WordDisplay
+                        word={word}
+                        ipa={getIPA(word)}
+                        currentCharIndex={wordIndex === currentWordIndex ? currentCharIndex : 0}
+                        isCurrentWord={wordIndex === currentWordIndex}
+                        isCompleted={wordIndex < currentWordIndex}
+                        typedChars={wordTypedChars[wordIndex] || ''}
+                        errors={wordErrors[wordIndex] || []}
+                        showIPA={showIPA}
+                        dictationMode={dictationMode}
+                        theme={theme}
+                        showSpace={wordIndex < words.length - 1} // Show space for all words except the last
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               
             </>

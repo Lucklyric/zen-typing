@@ -6,16 +6,17 @@ import SessionStats from './components/SessionStats';
 import Footer from './components/Footer';
 import { sampleTexts } from './data/sampleTexts';
 import { audioManager } from './utils/audioManager';
+import { settingsStorage } from './utils/settingsStorage';
 
 function App() {
   const [selectedText, setSelectedText] = useState(sampleTexts[0].text);
-  const [showIPA, setShowIPA] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [showHistory, setShowHistory] = useState(true); // Show history by default
-  const [dictationMode, setDictationMode] = useState(false);
-  const [theme, setTheme] = useState('normal'); // 'normal' or 'geek'
+  const [showIPA, setShowIPA] = useState(() => settingsStorage.get('showIPA'));
+  const [soundEnabled, setSoundEnabled] = useState(() => settingsStorage.get('soundEnabled'));
+  const [showHistory, setShowHistory] = useState(() => settingsStorage.get('showHistory'));
+  const [dictationMode, setDictationMode] = useState(() => settingsStorage.get('dictationMode'));
+  const [theme, setTheme] = useState(() => settingsStorage.get('theme'));
   const [completedSessions, setCompletedSessions] = useState([]);
-  const [activeSection, setActiveSection] = useState('practice'); // 'practice' or 'templates'
+  const [activeSection, setActiveSection] = useState(() => settingsStorage.get('activeSection'));
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -57,6 +58,32 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [soundEnabled]);
 
+  // Persist settings when they change
+  useEffect(() => {
+    settingsStorage.set('theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    settingsStorage.set('showIPA', showIPA);
+  }, [showIPA]);
+
+  useEffect(() => {
+    settingsStorage.set('soundEnabled', soundEnabled);
+    audioManager.setEnabled(soundEnabled);
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    settingsStorage.set('dictationMode', dictationMode);
+  }, [dictationMode]);
+
+  useEffect(() => {
+    settingsStorage.set('showHistory', showHistory);
+  }, [showHistory]);
+
+  useEffect(() => {
+    settingsStorage.set('activeSection', activeSection);
+  }, [activeSection]);
+
   const handleTextSelect = (text) => {
     setSelectedText(text);
   };
@@ -73,7 +100,6 @@ function App() {
   const toggleSound = () => {
     const newSoundEnabled = !soundEnabled;
     setSoundEnabled(newSoundEnabled);
-    audioManager.setEnabled(newSoundEnabled);
   };
 
   return (

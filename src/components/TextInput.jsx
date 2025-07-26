@@ -50,12 +50,12 @@ const TextInput = ({ onTextSubmit, theme = 'normal' }) => {
                 ? '// paste.your.english.text.here...' 
                 : 'Paste or type your English paragraph here...'
               }
-              className={`w-full h-32 p-3 border focus:outline-none focus:ring-2 ${
+              className={`w-full h-48 p-3 border focus:outline-none focus:ring-2 resize-none overflow-y-auto ${
                 theme === 'geek'
-                  ? 'border-green-500/30 bg-black text-green-400 font-mono focus:ring-green-400 focus:border-green-400 placeholder-green-400/40'
-                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-blue-500'
+                  ? 'border-green-500/30 bg-black text-green-400 font-mono focus:ring-green-400 focus:border-green-400 placeholder-green-400/40 custom-scrollbar-geek'
+                  : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-blue-500 custom-scrollbar'
               }`}
-              maxLength={5000}
+              maxLength={25000}
               autoFocus
             />
             <div className="flex justify-between items-center mt-4">
@@ -64,10 +64,12 @@ const TextInput = ({ onTextSubmit, theme = 'normal' }) => {
                   ? 'text-green-400/60 font-mono'
                   : 'text-gray-500'
               }`}>
-                {theme === 'geek' 
-                  ? `// chars: ${text.length}/5000` 
-                  : `${text.length}/5000 characters`
-                }
+                {(() => {
+                  const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
+                  return theme === 'geek' 
+                    ? `// chars: ${text.length.toLocaleString()}/25K | words: ${wordCount.toLocaleString()}/5K` 
+                    : `${text.length.toLocaleString()}/25,000 characters (${wordCount.toLocaleString()} words)`;
+                })()}
               </span>
               <div className="space-x-2">
                 <button
