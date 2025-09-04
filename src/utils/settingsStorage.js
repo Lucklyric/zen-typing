@@ -12,7 +12,12 @@ const DEFAULT_SETTINGS = {
   showProgress: true,
   showTimer: true,
   keyboardLayout: 'qwerty',
-  activeSection: 'practice' // 'practice' or 'templates'
+  activeSection: 'practice', // 'practice' or 'templates'
+  // Reference Mode settings
+  typingMode: 'normal', // 'normal' or 'reference'
+  splitRatio: 0.5, // Left panel ratio (0.2 - 0.8)
+  autoSwitchReference: true, // Auto-switch to reference mode when selecting reference text
+  centerAreaHeight: 500 // Center input area height in pixels (300 - 1000)
 };
 
 export const settingsStorage = {

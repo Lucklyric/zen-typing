@@ -28,6 +28,16 @@
   }
   
   /* Geek theme scrollbar */
+  .custom-scrollbar-geek {
+    /* Ensure consistent thin scrollbar in Firefox and others */
+    scrollbar-width: thin;
+  }
+  
+  .custom-scrollbar-geek::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
   .custom-scrollbar-geek::-webkit-scrollbar-track {
     @apply bg-green-900/20 rounded;
   }
@@ -79,6 +89,7 @@
     text-align: center;
     position: relative;
   }
+
 }
 
 @keyframes slideUp {
@@ -118,5 +129,24 @@
   }
   51%, 100% {
     opacity: 0;
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up, 
+  .animate-fade-in, 
+  .animate-scale-in, 
+  .cursor-blink {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  /* Provide alternative non-animated states for accessibility */
+  .animate-slide-up,
+  .animate-fade-in,
+  .animate-scale-in {
+    opacity: 1;
+    transform: none;
   }
 }

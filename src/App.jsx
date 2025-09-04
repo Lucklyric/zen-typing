@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import TypingArea from './components/TypingArea';
+import ReferenceWorkspace from './components/ReferenceWorkspace';
+import ResizableContainer from './components/ResizableContainer';
 import TextInput from './components/TextInput';
 import CustomTextHistory from './components/CustomTextHistory';
 import SessionStats from './components/SessionStats';
@@ -9,7 +11,11 @@ import { audioManager } from './utils/audioManager';
 import { settingsStorage } from './utils/settingsStorage';
 
 function App() {
-  const [selectedText, setSelectedText] = useState(sampleTexts[0].text);
+  // Convert selectedText to selectedEntry object
+  const [selectedEntry, setSelectedEntry] = useState({
+    text: sampleTexts[0].text,
+    mode: 'normal'
+  });
   const [showIPA, setShowIPA] = useState(() => settingsStorage.get('showIPA'));
   const [soundEnabled, setSoundEnabled] = useState(() => settingsStorage.get('soundEnabled'));
   const [showHistory, setShowHistory] = useState(() => settingsStorage.get('showHistory'));
@@ -17,37 +23,51 @@ function App() {
   const [theme, setTheme] = useState(() => settingsStorage.get('theme'));
   const [completedSessions, setCompletedSessions] = useState([]);
   const [activeSection, setActiveSection] = useState(() => settingsStorage.get('activeSection'));
+  
+  // Reference Mode state
+  const [splitRatio, setSplitRatio] = useState(() => settingsStorage.get('splitRatio'));
+  const [centerAreaHeight, setCenterAreaHeight] = useState(() => settingsStorage.get('centerAreaHeight'));
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't trigger shortcuts when user is typing in form fields
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      
+      // Prevent repeat triggers from holding keys
+      if (e.repeat) return;
+      
+      const key = e.key.toLowerCase();
+      
       // Always handle shortcuts, but prevent default to stop character input
       // Ctrl/Cmd + I: Toggle IPA
-      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+      if ((e.ctrlKey || e.metaKey) && key === 'i') {
         e.preventDefault();
         setShowIPA(prev => !prev);
         return;
       }
       // Ctrl/Cmd + S: Toggle sound
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
         toggleSound();
         return;
       }
       // Ctrl/Cmd + H: Toggle history
-      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+      if ((e.ctrlKey || e.metaKey) && key === 'h') {
         e.preventDefault();
         setShowHistory(prev => !prev);
         return;
       }
       // Ctrl/Cmd + D: Toggle dictation mode
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      if ((e.ctrlKey || e.metaKey) && key === 'd') {
         e.preventDefault();
         setDictationMode(prev => !prev);
         return;
       }
       // Ctrl/Cmd + T: Toggle theme
-      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+      if ((e.ctrlKey || e.metaKey) && key === 't') {
         e.preventDefault();
         setTheme(prev => prev === 'normal' ? 'geek' : 'normal');
         return;
@@ -56,7 +76,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [soundEnabled]);
+  }, [showIPA, soundEnabled, dictationMode, showHistory, theme]);
 
   // Persist settings when they change
   useEffect(() => {
@@ -84,13 +104,31 @@ function App() {
     settingsStorage.set('activeSection', activeSection);
   }, [activeSection]);
 
-  const handleTextSelect = (text) => {
-    setSelectedText(text);
+  // Persist Reference Mode settings
+  useEffect(() => {
+    settingsStorage.set('splitRatio', splitRatio);
+  }, [splitRatio]);
+
+  useEffect(() => {
+    settingsStorage.set('centerAreaHeight', centerAreaHeight);
+  }, [centerAreaHeight]);
+
+  const handleTextSelect = (textOrEntry) => {
+    if (typeof textOrEntry === 'string') {
+      // Legacy string format
+      setSelectedEntry({
+        text: textOrEntry,
+        mode: 'normal'
+      });
+    } else {
+      // New entry object format
+      setSelectedEntry(textOrEntry);
+    }
   };
 
   const handleComplete = (stats) => {
-    const wordCount = selectedText.trim().split(/\s+/).length;
-    setCompletedSessions([...completedSessions, { 
+    const wordCount = selectedEntry.text.trim().split(/\s+/).length;
+    setCompletedSessions(prev => [...prev, { 
       ...stats, 
       timestamp: Date.now(),
       wordCount 
@@ -101,6 +139,9 @@ function App() {
     const newSoundEnabled = !soundEnabled;
     setSoundEnabled(newSoundEnabled);
   };
+
+  // Determine if we should show reference workspace based on whether entry has reference text
+  const shouldShowReference = selectedEntry.referenceText && selectedEntry.referenceText.trim().length > 0;
 
   return (
     <div className={`min-h-screen flex flex-col ${
@@ -144,6 +185,9 @@ function App() {
               {/* IPA Toggle */}
               <button
                 onClick={() => setShowIPA(!showIPA)}
+                type="button"
+                aria-pressed={showIPA}
+                aria-label="Toggle IPA pronunciation display"
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
@@ -173,6 +217,9 @@ function App() {
               {/* Sound Toggle */}
               <button
                 onClick={toggleSound}
+                type="button"
+                aria-pressed={soundEnabled}
+                aria-label="Toggle typing sounds"
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
@@ -202,6 +249,9 @@ function App() {
               {/* Dictation Toggle */}
               <button
                 onClick={() => setDictationMode(!dictationMode)}
+                type="button"
+                aria-pressed={dictationMode}
+                aria-label="Toggle dictation mode - hides untyped text with first character hints"
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
@@ -231,14 +281,13 @@ function App() {
               {/* Theme Toggle */}
               <button
                 onClick={() => setTheme(prev => prev === 'normal' ? 'geek' : 'normal')}
+                type="button"
+                aria-pressed={theme === 'geek'}
+                aria-label="Toggle between normal and geek theme"
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? 'font-mono border bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
-                    : `rounded-lg ${
-                        theme === 'geek' 
-                          ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`
+                    : 'rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
                 title="Toggle Theme (Ctrl+T)"
               >
@@ -257,31 +306,74 @@ function App() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Stats Dashboard */}
-          {completedSessions.length > 0 && (
-            <SessionStats completedSessions={completedSessions} theme={theme} />
-          )}
-          
-          {/* Main Typing Area */}
-          <div className={`rounded-2xl shadow-xl p-8 mb-8 ${
-            theme === 'geek'
-              ? 'bg-black border border-green-500/30 shadow-green-500/20'
-              : 'bg-white dark:bg-gray-800'
-          }`}>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="container mx-auto px-4 flex-1 flex flex-col py-4">
+          <div className="max-w-7xl mx-auto flex-1 flex flex-col gap-4 min-h-0">
+            {/* Stats Dashboard */}
+            {completedSessions.length > 0 && (
+              <div className="flex-shrink-0">
+                <SessionStats completedSessions={completedSessions} theme={theme} />
+              </div>
+            )}
+            
+            
+            {/* Main Typing Area */}
+            <div className="flex-shrink-0">
+              <ResizableContainer
+                height={Math.min(centerAreaHeight, Math.floor(window.innerHeight * 0.6))}
+                onHeightChange={(newHeight) => {
+                  const vh = window.innerHeight;
+                  const maxH = Math.floor(vh * 0.6);
+                  setCenterAreaHeight(Math.min(newHeight, maxH));
+                }}
+                theme={theme}
+                minHeight={Math.min(300, Math.floor(window.innerHeight * 0.35))}
+                maxHeight={Math.floor(window.innerHeight * 0.6)}
+              >
+                {shouldShowReference ? (
+                  <div className={`h-full rounded-2xl shadow-xl overflow-hidden ${
+                    theme === 'geek'
+                      ? 'bg-black border border-green-500/30 shadow-green-500/20'
+                      : 'bg-white dark:bg-gray-800'
+                  }`}>
+                    <ReferenceWorkspace
+                      key={`${selectedEntry.text}-${selectedEntry.referenceText}`}
+                      referenceText={selectedEntry.referenceText}
+                      typingText={selectedEntry.text}
+                      onComplete={handleComplete}
+                      showIPA={showIPA}
+                      dictationMode={dictationMode}
+                      theme={theme}
+                      splitRatio={splitRatio}
+                      onSplitRatioChange={setSplitRatio}
+                      height={centerAreaHeight - 64} // Subtract padding
+                    />
+                  </div>
+                ) : (
+                  <div 
+                    className={`h-full rounded-2xl shadow-xl overflow-hidden ${
+                      theme === 'geek'
+                        ? 'bg-black border border-green-500/30 shadow-green-500/20'
+                        : 'bg-white dark:bg-gray-800'
+                    }`}
+                  >
+                    <TypingArea 
+                      key={selectedEntry.text}
+                      text={selectedEntry.text} 
+                      onComplete={handleComplete}
+                      showIPA={showIPA}
+                      dictationMode={dictationMode}
+                      theme={theme}
+                    />
+                  </div>
+                )}
+              </ResizableContainer>
+            </div>
 
-            <TypingArea 
-              key={selectedText}
-              text={selectedText} 
-              onComplete={handleComplete}
-              showIPA={showIPA}
-              dictationMode={dictationMode}
-              theme={theme}
-            />
-          </div>
-
-          {/* Content Selection with Tabs */}
+            {/* Content Selection with Tabs */}
+            <div className={`flex-1 overflow-y-auto min-h-0 ${
+              theme === 'geek' ? 'custom-scrollbar-geek' : 'custom-scrollbar'
+            }`}>
           <div className={`rounded-2xl shadow-lg p-6 ${
             theme === 'geek'
               ? 'bg-black border border-green-500/30 shadow-green-500/20'
@@ -418,7 +510,10 @@ function App() {
                       }
                     </button>
                   </div>
-                  <TextInput onTextSubmit={handleTextSelect} theme={theme} />
+                  <TextInput 
+                    onTextSubmit={handleTextSelect} 
+                    theme={theme}
+                  />
                   <CustomTextHistory 
                     isVisible={showHistory} 
                     onSelectText={handleTextSelect} 
@@ -444,9 +539,9 @@ function App() {
                 {theme === 'geek' ? '> SESSION.LOG' : 'Recent Sessions'}
               </h3>
               <div className="space-y-3">
-                {completedSessions.slice(-3).reverse().map((session, index) => (
+                {completedSessions.slice(-3).reverse().map((session) => (
                   <div 
-                    key={index} 
+                    key={session.timestamp} 
                     className={`flex items-center justify-between py-3 px-4 rounded-lg transition-colors ${
                       theme === 'geek'
                         ? 'bg-green-900/10 border border-green-500/20 hover:bg-green-900/20 hover:border-green-500/30'
@@ -502,6 +597,8 @@ function App() {
               </div>
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
       

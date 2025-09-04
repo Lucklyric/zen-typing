@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import WordDisplay from './WordDisplay';
 import { TypingEngine, TypingState } from '../utils/typingEngine';
-import { getIPA } from '../data/cmuIpaDict';
 import { audioManager } from '../utils/audioManager';
 
-const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, theme = 'normal' }) => {
+const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, theme = 'normal', inSplitView = false }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [wordTypedChars, setWordTypedChars] = useState({});
   const [wordErrors, setWordErrors] = useState({});
   const [stats, setStats] = useState(null);
+  const [getIpaFn, setGetIpaFn] = useState(null);
   const inputRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
@@ -18,19 +18,31 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
     inputRef.current?.focus();
   }, []);
 
+  // Lazy-load IPA dictionary when showIPA becomes true
+  useEffect(() => {
+    if (showIPA && !getIpaFn) {
+      import('../data/cmuIpaDict').then(({ getIPA }) => {
+        setGetIpaFn(() => getIPA);
+      });
+    }
+  }, [showIPA, getIpaFn]);
+
   // Auto-scroll to keep current word visible
   useEffect(() => {
     if (scrollContainerRef.current && currentWordIndex > 0) {
       const currentWordElement = scrollContainerRef.current.querySelector(`[data-word-index="${currentWordIndex}"]`);
       if (currentWordElement) {
-        currentWordElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Check if user prefers reduced motion
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        currentWordElement.scrollIntoView({ 
+          behavior: prefersReducedMotion ? 'auto' : 'smooth', 
+          block: 'center' 
+        });
       }
     }
   }, [currentWordIndex]);
 
   const handleKeyDown = (e) => {
-    e.preventDefault();
-
     if (engine.state === TypingState.COMPLETED) {
       return;
     }
@@ -40,6 +52,8 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
       // Let the shortcuts pass through but don't process as typing
       return;
     }
+
+    e.preventDefault();
 
     if (e.key === 'Backspace') {
       const prevWordIndex = engine.currentWordIndex;
@@ -199,14 +213,21 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
   const progress = ((completedChars + typedChars) / totalChars) * 100;
 
   return (
-    <div className="w-full">
+    <div className="w-full h-full flex flex-col">
       {/* Progress Bar */}
-      <div className="mb-4">
-        <div className={`h-2 rounded-full overflow-hidden ${
-          theme === 'geek'
-            ? 'bg-green-900/30 border border-green-500/20'
-            : 'bg-gray-200 dark:bg-gray-700'
-        }`}>
+      <div className="mb-4 flex-shrink-0">
+        <div 
+          className={`h-2 rounded-full overflow-hidden ${
+            theme === 'geek'
+              ? 'bg-green-900/30 border border-green-500/20'
+              : 'bg-gray-200 dark:bg-gray-700'
+          }`}
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-label="Typing progress"
+        >
           <div 
             className={`h-full transition-all duration-300 ease-out ${
               theme === 'geek'
@@ -219,16 +240,16 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
       </div>
       
       <div 
-        className={`cursor-text p-6 md:p-8 rounded-xl border ${
-          theme === 'geek'
-            ? 'bg-black border-green-500/30 font-mono'
-            : 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850 border-gray-200 dark:border-gray-700'
+        className={`cursor-text p-6 md:p-8 h-full flex flex-col ${
+          inSplitView 
+            ? (theme === 'geek' ? 'bg-black font-mono' : 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850')
+            : (theme === 'geek' ? 'bg-black font-mono' : 'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-850')
         }`}
         onClick={() => inputRef.current?.focus()}
       >
-        <div className="text-center mb-8">
+        <div className="flex-1 min-h-0 flex flex-col text-center overflow-hidden">
           {stats ? (
-            <div className="space-y-4 animate-scale-in">
+            <div className="space-y-4 animate-scale-in flex-1 flex flex-col justify-center" role="status">
               <div className="flex items-center justify-center mb-4">
                 <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
                   theme === 'geek'
@@ -320,16 +341,18 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
                   setWordTypedChars({});
                   setWordErrors({});
                   setStats(null);
+                  // Auto-focus the input to maintain typing flow
+                  inputRef.current?.focus();
                 }}
               >
                 {theme === 'geek' ? '> RESTART.SESSION' : 'Practice Again'}
               </button>
             </div>
           ) : (
-            <>
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <div 
                 ref={scrollContainerRef}
-                className={`max-h-96 overflow-y-auto px-1 ${
+                className={`flex-1 overflow-y-auto px-1 ${
                   theme === 'geek' ? 'custom-scrollbar-geek' : 'custom-scrollbar'
                 }`}
               >
@@ -340,7 +363,7 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
                     <div key={wordIndex} data-word-index={wordIndex}>
                       <WordDisplay
                         word={word}
-                        ipa={getIPA(word)}
+                        ipa={showIPA && getIpaFn ? getIpaFn(word) : null}
                         currentCharIndex={wordIndex === currentWordIndex ? currentCharIndex : 0}
                         isCurrentWord={wordIndex === currentWordIndex}
                         isCompleted={wordIndex < currentWordIndex}
@@ -356,31 +379,28 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
                 </div>
               </div>
               
-            </>
+              {/* Mobile-friendly typing hint */}
+              <div className={`mt-6 text-center text-sm flex-shrink-0 ${
+                theme === 'geek'
+                  ? 'text-green-400/70 font-mono'
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}>
+                <p className="hidden md:block">
+                  {theme === 'geek' 
+                    ? '// start.typing() -> begin.session | backspace() -> error.correct' 
+                    : 'Start typing to begin • Backspace to correct'
+                  }
+                </p>
+                <p className="md:hidden">
+                  {theme === 'geek'
+                    ? '// tap.screen -> init.session'
+                    : 'Tap here and start typing'
+                  }
+                </p>
+              </div>
+            </div>
           )}
         </div>
-
-        {/* Mobile-friendly typing hint */}
-        {!stats && (
-          <div className={`mt-6 text-center text-sm ${
-            theme === 'geek'
-              ? 'text-green-400/70 font-mono'
-              : 'text-gray-500 dark:text-gray-400'
-          }`}>
-            <p className="hidden md:block">
-              {theme === 'geek' 
-                ? '// start.typing() -> begin.session | backspace() -> error.correct' 
-                : 'Start typing to begin • Backspace to correct'
-              }
-            </p>
-            <p className="md:hidden">
-              {theme === 'geek'
-                ? '// tap.screen -> init.session'
-                : 'Tap here and start typing'
-              }
-            </p>
-          </div>
-        )}
         
         <input
           ref={inputRef}
