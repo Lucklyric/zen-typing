@@ -31,51 +31,59 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger shortcuts when user is typing in form fields
-      const el = document.activeElement;
-      const tag = el?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
-      
       // Prevent repeat triggers from holding keys
       if (e.repeat) return;
       
       const key = e.key.toLowerCase();
       
-      // Always handle shortcuts, but prevent default to stop character input
-      // Ctrl/Cmd + I: Toggle IPA
-      if ((e.ctrlKey || e.metaKey) && key === 'i') {
-        e.preventDefault();
-        setShowIPA(prev => !prev);
-        return;
+      // Handle shortcuts first, regardless of focus state
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + I: Toggle IPA
+        if (key === 'i') {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowIPA(prev => !prev);
+          return;
+        }
+        // Ctrl/Cmd + S: Toggle sound
+        if (key === 's') {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleSound();
+          return;
+        }
+        // Ctrl/Cmd + H: Toggle history
+        if (key === 'h') {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowHistory(prev => !prev);
+          return;
+        }
+        // Ctrl/Cmd + D: Toggle dictation mode
+        if (key === 'd') {
+          e.preventDefault();
+          e.stopPropagation();
+          setDictationMode(prev => !prev);
+          return;
+        }
+        // Ctrl/Cmd + T: Toggle theme
+        if (key === 't') {
+          e.preventDefault();
+          e.stopPropagation();
+          setTheme(prev => prev === 'normal' ? 'geek' : 'normal');
+          return;
+        }
       }
-      // Ctrl/Cmd + S: Toggle sound
-      if ((e.ctrlKey || e.metaKey) && key === 's') {
-        e.preventDefault();
-        toggleSound();
-        return;
-      }
-      // Ctrl/Cmd + H: Toggle history
-      if ((e.ctrlKey || e.metaKey) && key === 'h') {
-        e.preventDefault();
-        setShowHistory(prev => !prev);
-        return;
-      }
-      // Ctrl/Cmd + D: Toggle dictation mode
-      if ((e.ctrlKey || e.metaKey) && key === 'd') {
-        e.preventDefault();
-        setDictationMode(prev => !prev);
-        return;
-      }
-      // Ctrl/Cmd + T: Toggle theme
-      if ((e.ctrlKey || e.metaKey) && key === 't') {
-        e.preventDefault();
-        setTheme(prev => prev === 'normal' ? 'geek' : 'normal');
-        return;
-      }
+      
+      // For non-shortcut keys, don't trigger when user is typing in form fields
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Use capture phase to ensure shortcuts have priority over component handlers
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [showIPA, soundEnabled, dictationMode, showHistory, theme]);
 
   // Persist settings when they change
