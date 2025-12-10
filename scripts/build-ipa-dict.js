@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process */
 
 /**
  * Convert CMU IPA dictionary from TSV format to JavaScript format

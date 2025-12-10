@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import TypingArea from './components/TypingArea';
 import ReferenceWorkspace from './components/ReferenceWorkspace';
 import ResizableContainer from './components/ResizableContainer';
@@ -6,6 +6,8 @@ import TextInput from './components/TextInput';
 import CustomTextHistory from './components/CustomTextHistory';
 import SessionStats from './components/SessionStats';
 import Footer from './components/Footer';
+import SettingsMenu from './components/SettingsMenu';
+import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
 import { sampleTexts } from './data/sampleTexts';
 import { audioManager } from './utils/audioManager';
 import { settingsStorage } from './utils/settingsStorage';
@@ -20,13 +22,66 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(() => settingsStorage.get('soundEnabled'));
   const [showHistory, setShowHistory] = useState(() => settingsStorage.get('showHistory'));
   const [dictationMode, setDictationMode] = useState(() => settingsStorage.get('dictationMode'));
-  const [theme, setTheme] = useState(() => settingsStorage.get('theme'));
+
+  // Theme preference state (new system)
+  const [themePreference, setThemePreference] = useState(() => settingsStorage.get('themePreference'));
+  const [themeExplicitlySet, setThemeExplicitlySet] = useState(() => settingsStorage.get('themeExplicitlySet'));
+  const [systemDarkMode, setSystemDarkMode] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  // Computed theme for rendering
+  const theme = useMemo(() => {
+    if (themePreference === 'cyber') return 'cyber';
+    if (themePreference === 'geek') return 'geek';
+    if (themePreference === 'dark') return 'dark';
+    if (themePreference === 'system') {
+      return systemDarkMode ? 'dark' : 'normal';
+    }
+    return 'normal'; // 'light'
+  }, [themePreference, systemDarkMode]);
+
   const [completedSessions, setCompletedSessions] = useState([]);
   const [activeSection, setActiveSection] = useState(() => settingsStorage.get('activeSection'));
   
   // Reference Mode state
   const [splitRatio, setSplitRatio] = useState(() => settingsStorage.get('splitRatio'));
   const [centerAreaHeight, setCenterAreaHeight] = useState(() => settingsStorage.get('centerAreaHeight'));
+
+  // Settings menu state
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const settingsButtonRef = useRef(null);
+
+  // Keyboard shortcuts help modal state
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const shortcutsButtonRef = useRef(null);
+
+  // Focus mode state
+  const [focusMode, setFocusMode] = useState(() => settingsStorage.get('focusMode'));
+
+  // Track window height for responsive layout
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+
+  // Window resize listener
+  useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // System dark mode preference listener
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => setSystemDarkMode(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Apply dark class to document based on computed theme
+  useEffect(() => {
+    const isDark = theme === 'dark' || (theme === 'geek') || (theme === 'cyber'); // geek and cyber are always dark-ish
+    document.documentElement.classList.toggle('dark', isDark && theme !== 'geek' && theme !== 'cyber');
+  }, [theme]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -36,8 +91,23 @@ function App() {
       
       const key = e.key.toLowerCase();
       
+      // Handle focus mode escape (even without modifier)
+      if (key === 'escape' && focusMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusMode(false);
+        return;
+      }
+
       // Handle shortcuts first, regardless of focus state
       if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + Shift + F: Toggle focus mode
+        if (key === 'f' && e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          setFocusMode(prev => !prev);
+          return;
+        }
         // Ctrl/Cmd + I: Toggle IPA
         if (key === 'i') {
           e.preventDefault();
@@ -66,11 +136,18 @@ function App() {
           setDictationMode(prev => !prev);
           return;
         }
-        // Ctrl/Cmd + T: Toggle theme
+        // Ctrl/Cmd + T: Toggle theme (cycle through light/dark/geek/cyber)
         if (key === 't') {
           e.preventDefault();
           e.stopPropagation();
-          setTheme(prev => prev === 'normal' ? 'geek' : 'normal');
+          setThemePreference(prev => {
+            // Simple cycle: light -> dark -> geek -> cyber -> light
+            if (prev === 'light' || prev === 'system') return 'dark';
+            if (prev === 'dark') return 'geek';
+            if (prev === 'geek') return 'cyber';
+            return 'light';
+          });
+          setThemeExplicitlySet(true);
           return;
         }
       }
@@ -84,12 +161,15 @@ function App() {
     // Use capture phase to ensure shortcuts have priority over component handlers
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [showIPA, soundEnabled, dictationMode, showHistory, theme]);
+  }, [focusMode]); // focusMode needed for escape key handler
 
   // Persist settings when they change
   useEffect(() => {
-    settingsStorage.set('theme', theme);
-  }, [theme]);
+    settingsStorage.set('themePreference', themePreference);
+    settingsStorage.set('themeExplicitlySet', themeExplicitlySet);
+    // Also update legacy theme for backwards compatibility
+    settingsStorage.set('theme', theme === 'geek' ? 'geek' : 'normal');
+  }, [themePreference, themeExplicitlySet, theme]);
 
   useEffect(() => {
     settingsStorage.set('showIPA', showIPA);
@@ -111,6 +191,10 @@ function App() {
   useEffect(() => {
     settingsStorage.set('activeSection', activeSection);
   }, [activeSection]);
+
+  useEffect(() => {
+    settingsStorage.set('focusMode', focusMode);
+  }, [focusMode]);
 
   // Persist Reference Mode settings
   useEffect(() => {
@@ -144,8 +228,7 @@ function App() {
   };
 
   const toggleSound = () => {
-    const newSoundEnabled = !soundEnabled;
-    setSoundEnabled(newSoundEnabled);
+    setSoundEnabled(prev => !prev);
   };
 
   // Determine if we should show reference workspace based on whether entry has reference text
@@ -155,12 +238,19 @@ function App() {
     <div className={`min-h-screen flex flex-col ${
       theme === 'geek' 
         ? 'bg-black text-green-400 font-mono' 
+        : theme === 'cyber'
+        ? 'cyber-grid-bg text-cyan-400 font-mono overflow-x-hidden selection:bg-cyan-500/30 selection:text-cyan-100'
         : 'bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950'
     }`}>
-      {/* Fixed Header */}
-      <header className={`sticky top-0 z-50 backdrop-blur-md border-b ${
+      {theme === 'cyber' && <div className="cyber-scanlines" />}
+      {/* Fixed Header - hidden in focus mode */}
+      <header className={`sticky top-0 z-50 backdrop-blur-md border-b focus-fade-out ${
+        focusMode ? 'focus-mode-hidden' : ''
+      } ${
         theme === 'geek'
           ? 'bg-black/90 border-green-500/30 shadow-lg shadow-green-500/10'
+          : theme === 'cyber'
+          ? 'bg-black/80 border-cyan-500/30 shadow-[0_0_15px_rgba(0,243,255,0.2)]'
           : 'bg-white/80 dark:bg-gray-900/80 border-gray-200 dark:border-gray-800'
       }`}>
         <div className="container mx-auto px-4 py-4">
@@ -169,146 +259,226 @@ function App() {
               <img 
                 src={`${import.meta.env.BASE_URL}favicon.png`}
                 alt="Zen Typing Logo" 
-                className={`w-10 h-10 ${theme === 'geek' ? 'filter brightness-0 invert hue-rotate-90' : ''}`}
+                className={`w-10 h-10 ${theme === 'geek' ? 'filter brightness-0 invert hue-rotate-90' : theme === 'cyber' ? 'filter brightness-0 invert hue-rotate-180 drop-shadow-[0_0_5px_rgba(0,243,255,0.8)]' : ''}`}
               />
               <div>
                 <h1 className={`text-2xl font-bold ${
                   theme === 'geek' 
                     ? 'text-green-400 font-mono tracking-wider' 
+                    : theme === 'cyber'
+                    ? 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 font-mono tracking-wider text-shadow-cyber'
                     : 'text-gray-800 dark:text-gray-100'
                 }`}>
-                  {theme === 'geek' ? '> ZEN.TYPING' : 'Zen Typing'}
+                  {theme === 'geek' ? '> ZEN.TYPING' : theme === 'cyber' ? 'ZEN_TYPING_V2.0' : 'Zen Typing'}
                 </h1>
                 <p className={`text-xs ${
                   theme === 'geek' 
                     ? 'text-green-400/70 font-mono' 
+                    : theme === 'cyber'
+                    ? 'text-cyan-400/70 font-mono animate-pulse'
                     : 'text-gray-600 dark:text-gray-400'
                 }`}>
-                  {theme === 'geek' ? '// hack.your.typing.skills' : 'Master typing with pronunciation'}
+                  {theme === 'geek' ? '// hack.your.typing.skills' : theme === 'cyber' ? '>> INITIATING NEURAL LINK...' : 'Master typing with pronunciation'}
                 </p>
               </div>
             </div>
             
             <div className="flex items-center gap-3">
-              {/* IPA Toggle */}
+              {/* Desktop: IPA Toggle - hidden on mobile */}
               <button
                 onClick={() => setShowIPA(!showIPA)}
                 type="button"
                 aria-pressed={showIPA}
                 aria-label="Toggle IPA pronunciation display"
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                className={`hidden md:flex items-center gap-2 px-4 py-2 min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
-                        showIPA 
-                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                        showIPA
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
                           : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
                       }`
                     : `rounded-lg ${
-                        showIPA 
-                          ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' 
+                        showIPA
+                          ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                       }`
                 }`}
                 title="Toggle IPA (Ctrl+I)"
               >
                 <span>{theme === 'geek' ? (showIPA ? '[+]' : '[ ]') : (showIPA ? '🔤' : '🔡')}</span>
-                <span>{theme === 'geek' ? 'IPA' : 'IPA'}</span>
-                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
-                  theme === 'geek' 
-                    ? 'bg-green-500/20 text-green-400' 
+                <span className="hidden lg:inline">{theme === 'geek' ? 'IPA' : 'IPA'}</span>
+                <kbd className={`hidden lg:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek'
+                    ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
                 }`}>
                   {theme === 'geek' ? 'CTRL+I' : '⌘I'}
                 </kbd>
               </button>
-              
-              {/* Sound Toggle */}
+
+              {/* Desktop: Sound Toggle - hidden on mobile */}
               <button
                 onClick={toggleSound}
                 type="button"
                 aria-pressed={soundEnabled}
                 aria-label="Toggle typing sounds"
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                className={`hidden md:flex items-center gap-2 px-4 py-2 min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
-                        soundEnabled 
-                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                        soundEnabled
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
                           : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
                       }`
                     : `rounded-lg ${
-                        soundEnabled 
-                          ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' 
+                        soundEnabled
+                          ? 'bg-green-500 text-white shadow-lg shadow-green-500/20'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                       }`
                 }`}
                 title="Toggle Sound (Ctrl+S)"
               >
                 <span>{theme === 'geek' ? (soundEnabled ? '[♪]' : '[x]') : (soundEnabled ? '🔊' : '🔇')}</span>
-                <span>Sound</span>
-                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
-                  theme === 'geek' 
-                    ? 'bg-green-500/20 text-green-400' 
+                <span className="hidden lg:inline">Sound</span>
+                <kbd className={`hidden lg:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek'
+                    ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
                 }`}>
                   {theme === 'geek' ? 'CTRL+S' : '⌘S'}
                 </kbd>
               </button>
-              
-              {/* Dictation Toggle */}
+
+              {/* Desktop: Dictation Toggle - hidden on mobile, in settings menu */}
               <button
                 onClick={() => setDictationMode(!dictationMode)}
                 type="button"
                 aria-pressed={dictationMode}
                 aria-label="Toggle dictation mode - hides untyped text with first character hints"
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                className={`hidden lg:flex items-center gap-2 px-4 py-2 min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? `font-mono border ${
-                        dictationMode 
-                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20' 
+                        dictationMode
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
                           : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
                       }`
                     : `rounded-lg ${
-                        dictationMode 
-                          ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' 
+                        dictationMode
+                          ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                       }`
                 }`}
                 title="Toggle Dictation Mode (Ctrl+D)"
               >
                 <span>{theme === 'geek' ? (dictationMode ? '[●]' : '[○]') : (dictationMode ? '👁️' : '👁️‍🗨️')}</span>
-                <span>Dictation</span>
-                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
-                  theme === 'geek' 
-                    ? 'bg-green-500/20 text-green-400' 
+                <span className="hidden xl:inline">Dictation</span>
+                <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek'
+                    ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
                 }`}>
                   {theme === 'geek' ? 'CTRL+D' : '⌘D'}
                 </kbd>
               </button>
-              
-              {/* Theme Toggle */}
+
+              {/* Desktop: Theme Toggle - hidden on mobile, in settings menu */}
               <button
-                onClick={() => setTheme(prev => prev === 'normal' ? 'geek' : 'normal')}
+                onClick={() => {
+                  setThemePreference(prev => {
+                    if (prev === 'light' || prev === 'system') return 'dark';
+                    if (prev === 'dark') return 'geek';
+                    if (prev === 'geek') return 'cyber';
+                    return 'light';
+                  });
+                  setThemeExplicitlySet(true);
+                }}
                 type="button"
-                aria-pressed={theme === 'geek'}
-                aria-label="Toggle between normal and geek theme"
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
+                aria-pressed={theme === 'geek' || theme === 'cyber'}
+                aria-label="Toggle between light, dark, geek, and cyber theme"
+                className={`hidden lg:flex items-center gap-2 px-4 py-2 min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
                   theme === 'geek'
                     ? 'font-mono border bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
+                    : theme === 'cyber'
+                    ? 'font-mono border bg-cyan-900/20 border-cyan-400 text-cyan-400 shadow-lg shadow-cyan-400/50 text-shadow-neon'
+                    : theme === 'dark'
+                    ? 'rounded-lg bg-gray-700 text-gray-100 hover:bg-gray-600'
                     : 'rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
                 title="Toggle Theme (Ctrl+T)"
               >
-                <span>{theme === 'geek' ? '[T]' : '🎨'}</span>
-                <span>{theme === 'geek' ? 'GEEK' : 'Normal'}</span>
-                <kbd className={`hidden sm:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
-                  theme === 'geek' 
-                    ? 'bg-green-500/20 text-green-400' 
+                <span>{theme === 'geek' ? '[T]' : theme === 'cyber' ? '<T>' : theme === 'dark' ? '🌙' : '☀️'}</span>
+                <span className="hidden xl:inline">{theme === 'geek' ? 'GEEK' : theme === 'cyber' ? 'CYBER' : theme === 'dark' ? 'Dark' : 'Light'}</span>
+                <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                  theme === 'geek'
+                    ? 'bg-green-500/20 text-green-400'
+                    : theme === 'cyber'
+                    ? 'bg-cyan-500/20 text-cyan-300'
                     : 'bg-black/10 dark:bg-white/10'
                 }`}>
-                  {theme === 'geek' ? 'CTRL+T' : '⌘T'}
+                  {theme === 'geek' ? 'CTRL+T' : theme === 'cyber' ? 'CTRL+T' : '⌘T'}
                 </kbd>
               </button>
+
+              {/* Keyboard Shortcuts "?" Button */}
+              <button
+                ref={shortcutsButtonRef}
+                type="button"
+                onClick={() => setShowShortcutsHelp(true)}
+                aria-label="Show keyboard shortcuts"
+                className={`hidden md:flex items-center justify-center min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
+                  theme === 'geek'
+                    ? 'font-mono border bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                    : 'rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+                title="Keyboard shortcuts"
+              >
+                <span className={`text-lg font-bold ${theme === 'geek' ? 'font-mono' : ''}`}>?</span>
+              </button>
+
+              {/* Settings Gear Button - visible always, toggles menu */}
+              <div className="relative">
+                <button
+                  ref={settingsButtonRef}
+                  type="button"
+                  onClick={() => setSettingsMenuOpen(prev => !prev)}
+                  aria-label="Open settings menu"
+                  aria-expanded={settingsMenuOpen}
+                  aria-haspopup="true"
+                  className={`flex items-center justify-center min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
+                    theme === 'geek'
+                      ? `font-mono border ${settingsMenuOpen ? 'bg-green-900/50 border-green-400 text-green-400' : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'}`
+                      : `rounded-lg ${settingsMenuOpen ? 'bg-gray-200 dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-800'} text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700`
+                  }`}
+                  title="Settings"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+                <SettingsMenu
+                  isOpen={settingsMenuOpen}
+                  onClose={() => setSettingsMenuOpen(false)}
+                  theme={theme}
+                  triggerRef={settingsButtonRef}
+                  dictationMode={dictationMode}
+                  onDictationToggle={() => setDictationMode(prev => !prev)}
+                  showIPA={showIPA}
+                  onIPAToggle={() => setShowIPA(prev => !prev)}
+                  soundEnabled={soundEnabled}
+                  onSoundToggle={toggleSound}
+                  themePreference={themePreference}
+                  onThemeChange={(pref) => {
+                    setThemePreference(pref);
+                    setThemeExplicitlySet(true);
+                  }}
+                  focusMode={focusMode}
+                  onFocusModeToggle={() => {
+                    setFocusMode(prev => !prev);
+                    setSettingsMenuOpen(false);
+                  }}
+                  onShowShortcuts={() => setShowShortcutsHelp(true)}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -317,9 +487,9 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="container mx-auto px-4 flex-1 flex flex-col py-4">
           <div className="max-w-7xl mx-auto flex-1 flex flex-col gap-4 min-h-0">
-            {/* Stats Dashboard */}
-            {completedSessions.length > 0 && (
-              <div className="flex-shrink-0">
+            {/* Stats Dashboard - hidden in focus mode */}
+            {completedSessions.length > 0 && !focusMode && (
+              <div className="flex-shrink-0 focus-fade-out">
                 <SessionStats completedSessions={completedSessions} theme={theme} />
               </div>
             )}
@@ -328,20 +498,21 @@ function App() {
             {/* Main Typing Area */}
             <div className="flex-shrink-0">
               <ResizableContainer
-                height={Math.min(centerAreaHeight, Math.floor(window.innerHeight * 0.6))}
+                height={Math.min(centerAreaHeight, Math.floor(windowHeight * 0.6))}
                 onHeightChange={(newHeight) => {
-                  const vh = window.innerHeight;
-                  const maxH = Math.floor(vh * 0.6);
+                  const maxH = Math.floor(windowHeight * 0.6);
                   setCenterAreaHeight(Math.min(newHeight, maxH));
                 }}
                 theme={theme}
-                minHeight={Math.min(300, Math.floor(window.innerHeight * 0.35))}
-                maxHeight={Math.floor(window.innerHeight * 0.6)}
+                minHeight={Math.min(300, Math.floor(windowHeight * 0.35))}
+                maxHeight={Math.floor(windowHeight * 0.6)}
               >
                 {shouldShowReference ? (
                   <div className={`h-full rounded-2xl shadow-xl overflow-hidden ${
                     theme === 'geek'
                       ? 'bg-black border border-green-500/30 shadow-green-500/20'
+                      : theme === 'cyber'
+                      ? 'bg-black/40 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,243,255,0.15)] backdrop-blur-sm'
                       : 'bg-white dark:bg-gray-800'
                   }`}>
                     <ReferenceWorkspace
@@ -362,6 +533,8 @@ function App() {
                     className={`h-full rounded-2xl shadow-xl overflow-hidden ${
                       theme === 'geek'
                         ? 'bg-black border border-green-500/30 shadow-green-500/20'
+                        : theme === 'cyber'
+                        ? 'bg-black/40 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,243,255,0.15)] backdrop-blur-sm'
                         : 'bg-white dark:bg-gray-800'
                     }`}
                   >
@@ -378,29 +551,41 @@ function App() {
               </ResizableContainer>
             </div>
 
-            {/* Content Selection with Tabs */}
-            <div className={`flex-1 overflow-y-auto min-h-0 ${
-              theme === 'geek' ? 'custom-scrollbar-geek' : 'custom-scrollbar'
+            {/* Content Selection with Tabs - hidden in focus mode */}
+            <div className={`flex-1 overflow-y-auto min-h-0 focus-fade-out ${
+              focusMode ? 'focus-mode-hidden' : ''
+            } ${
+              theme === 'geek' ? 'custom-scrollbar-geek' : theme === 'cyber' ? 'custom-scrollbar-cyber' : 'custom-scrollbar'
             }`}>
           <div className={`rounded-2xl shadow-lg p-6 ${
             theme === 'geek'
               ? 'bg-black border border-green-500/30 shadow-green-500/20'
+              : theme === 'cyber'
+              ? 'bg-black/60 border border-cyan-500/30 shadow-[0_0_10px_rgba(0,243,255,0.1)] backdrop-blur-md'
               : 'bg-white dark:bg-gray-800'
           }`}>
             {/* Tab Navigation */}
             <div className={`flex space-x-1 mb-6 p-1 rounded-lg ${
               theme === 'geek'
                 ? 'bg-green-900/20 border border-green-500/30'
+                : theme === 'cyber'
+                ? 'bg-cyan-900/10 border border-cyan-500/20'
                 : 'bg-gray-100 dark:bg-gray-700'
             }`}>
               <button
                 onClick={() => setActiveSection('practice')}
-                className={`flex-1 px-4 py-2 rounded-md transition-all ${
+                className={`flex-1 px-4 py-2 min-h-[44px] rounded-md transition-all ${
                   theme === 'geek'
                     ? `font-mono ${
                         activeSection === 'practice'
                           ? 'bg-green-900/50 border border-green-400 text-green-400 shadow-sm'
                           : 'text-green-400/70 hover:text-green-400 hover:bg-green-900/30'
+                      }`
+                    : theme === 'cyber'
+                    ? `font-mono ${
+                        activeSection === 'practice'
+                          ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,243,255,0.3)]'
+                          : 'text-cyan-700 hover:text-cyan-400 hover:bg-cyan-900/30'
                       }`
                     : `font-medium ${
                         activeSection === 'practice'
@@ -409,16 +594,22 @@ function App() {
                       }`
                 }`}
               >
-                {theme === 'geek' ? '[>] PRACTICE.TEMPLATES' : 'Practice Templates'}
+                {theme === 'geek' ? '[>] PRACTICE.TEMPLATES' : theme === 'cyber' ? '>> PRACTICE_MODULES' : 'Practice Templates'}
               </button>
               <button
                 onClick={() => setActiveSection('custom')}
-                className={`flex-1 px-4 py-2 rounded-md transition-all ${
+                className={`flex-1 px-4 py-2 min-h-[44px] rounded-md transition-all ${
                   theme === 'geek'
                     ? `font-mono ${
                         activeSection === 'custom'
                           ? 'bg-green-900/50 border border-green-400 text-green-400 shadow-sm'
                           : 'text-green-400/70 hover:text-green-400 hover:bg-green-900/30'
+                      }`
+                    : theme === 'cyber'
+                    ? `font-mono ${
+                        activeSection === 'custom'
+                          ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,243,255,0.3)]'
+                          : 'text-cyan-700 hover:text-cyan-400 hover:bg-cyan-900/30'
                       }`
                     : `font-medium ${
                         activeSection === 'custom'
@@ -427,7 +618,7 @@ function App() {
                       }`
                 }`}
               >
-                {theme === 'geek' ? '[+] CUSTOM.TEXT' : 'Custom Text'}
+                {theme === 'geek' ? '[+] CUSTOM.TEXT' : theme === 'cyber' ? '>> CUSTOM_INPUT' : 'Custom Text'}
               </button>
             </div>
 
@@ -537,14 +728,18 @@ function App() {
             <div className={`mt-8 rounded-xl shadow-sm p-6 ${
               theme === 'geek'
                 ? 'bg-black border border-green-500/30'
+                : theme === 'cyber'
+                ? 'bg-black/60 border border-cyan-500/30 backdrop-blur-md'
                 : 'bg-white dark:bg-gray-800'
             }`}>
               <h3 className={`text-sm font-medium mb-4 uppercase tracking-wide ${
                 theme === 'geek'
                   ? 'text-green-400 font-mono'
+                  : theme === 'cyber'
+                  ? 'text-cyan-400 font-mono text-shadow-neon'
                   : 'text-gray-600 dark:text-gray-400'
               }`}>
-                {theme === 'geek' ? '> SESSION.LOG' : 'Recent Sessions'}
+                {theme === 'geek' ? '> SESSION.LOG' : theme === 'cyber' ? '>> SYSTEM_LOGS' : 'Recent Sessions'}
               </h3>
               <div className="space-y-3">
                 {completedSessions.slice(-3).reverse().map((session) => (
@@ -553,6 +748,8 @@ function App() {
                     className={`flex items-center justify-between py-3 px-4 rounded-lg transition-colors ${
                       theme === 'geek'
                         ? 'bg-green-900/10 border border-green-500/20 hover:bg-green-900/20 hover:border-green-500/30'
+                        : theme === 'cyber'
+                        ? 'bg-cyan-900/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-400/50'
                         : 'bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -561,6 +758,8 @@ function App() {
                         <div className={`text-2xl font-bold ${
                           theme === 'geek'
                             ? 'text-green-400 font-mono'
+                            : theme === 'cyber'
+                            ? 'text-cyan-300 font-mono text-shadow-neon'
                             : 'text-gray-900 dark:text-gray-100'
                         }`}>
                           {session.netWPM}
@@ -568,15 +767,19 @@ function App() {
                         <div className={`text-xs ${
                           theme === 'geek'
                             ? 'text-green-400/70 font-mono'
+                            : theme === 'cyber'
+                            ? 'text-cyan-600 font-mono'
                             : 'text-gray-500 dark:text-gray-400'
                         }`}>
-                          {theme === 'geek' ? 'WPM' : 'WPM'}
+                          {theme === 'geek' ? 'WPM' : theme === 'cyber' ? 'SPEED_WPM' : 'WPM'}
                         </div>
                       </div>
                       <div className="text-center">
                         <div className={`text-2xl font-bold ${
                           theme === 'geek'
                             ? 'text-green-400 font-mono'
+                            : theme === 'cyber'
+                            ? 'text-cyan-300 font-mono text-shadow-neon'
                             : 'text-gray-900 dark:text-gray-100'
                         }`}>
                           {session.accuracy}%
@@ -584,19 +787,25 @@ function App() {
                         <div className={`text-xs ${
                           theme === 'geek'
                             ? 'text-green-400/70 font-mono'
+                            : theme === 'cyber'
+                            ? 'text-cyan-600 font-mono'
                             : 'text-gray-500 dark:text-gray-400'
                         }`}>
-                          {theme === 'geek' ? 'ACC' : 'Accuracy'}
+                          {theme === 'geek' ? 'ACC' : theme === 'cyber' ? 'PRECISION' : 'Accuracy'}
                         </div>
                       </div>
                     </div>
                     <span className={`text-sm ${
                       theme === 'geek'
                         ? 'text-green-400/60 font-mono'
+                        : theme === 'cyber'
+                        ? 'text-cyan-700 font-mono'
                         : 'text-gray-500 dark:text-gray-400'
                     }`}>
                       {theme === 'geek' 
                         ? `[${new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}]`
+                        : theme === 'cyber'
+                        ? `<${new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}>`
                         : new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                       }
                     </span>
@@ -610,7 +819,58 @@ function App() {
         </div>
       </div>
       
-      <Footer theme={theme} />
+      {/* Footer - hidden in focus mode */}
+      <div className={`focus-fade-out ${focusMode ? 'focus-mode-hidden' : ''}`}>
+        <Footer theme={theme} />
+      </div>
+
+      {/* Desktop keyboard shortcuts hint - hidden in focus mode */}
+      {!focusMode && (
+        <div
+          className={`hidden lg:block fixed bottom-4 left-4 text-xs z-10 cursor-pointer ${
+            theme === 'geek'
+              ? 'text-green-400/40 font-mono hover:text-green-400/70'
+              : 'text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400'
+          }`}
+          onClick={() => setShowShortcutsHelp(true)}
+        >
+          <kbd className={`px-1.5 py-0.5 rounded ${
+            theme === 'geek'
+              ? 'bg-green-900/20 border border-green-500/20'
+              : 'bg-gray-100 dark:bg-gray-800'
+          }`}>?</kbd>
+          <span className="ml-1">{theme === 'geek' ? 'SHORTCUTS' : 'Shortcuts'}</span>
+        </div>
+      )}
+
+      {/* Focus mode exit hint */}
+      {focusMode && (
+        <div
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 text-sm z-10 animate-fade-in ${
+            theme === 'geek'
+              ? 'text-green-400/50 font-mono'
+              : 'text-gray-400 dark:text-gray-500'
+          }`}
+        >
+          <kbd className={`px-2 py-1 rounded mr-2 ${
+            theme === 'geek'
+              ? 'bg-green-900/30 border border-green-500/30'
+              : 'bg-gray-100 dark:bg-gray-800'
+          }`}>ESC</kbd>
+          <span>{theme === 'geek' ? 'exit.focus.mode' : 'to exit focus mode'}</span>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <KeyboardShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => {
+          setShowShortcutsHelp(false);
+          // Return focus to the shortcuts button if it exists
+          shortcutsButtonRef.current?.focus();
+        }}
+        theme={theme}
+      />
     </div>
   );
 }

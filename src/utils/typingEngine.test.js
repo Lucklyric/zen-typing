@@ -41,7 +41,8 @@ describe('TypingEngine', () => {
       const result = engine.processKeystroke('X');
       expect(result.isCorrect).toBe(false);
       expect(engine.errors.length).toBe(1);
-      expect(engine.typedText).toBe('');
+      expect(engine.typedText).toBe('X');
+      expect(engine.currentCharIndex).toBe(1);
     });
 
     it('should advance to next word after space', () => {
@@ -79,9 +80,9 @@ describe('TypingEngine', () => {
     });
 
     it('should track errors correctly', () => {
-      engine.processKeystroke('X'); // Wrong
-      engine.processKeystroke('H'); // Correct
-      
+      engine.processKeystroke('X'); // Wrong - expected 'H', cursor advances to index 1
+      engine.processKeystroke('e'); // Correct - expected 'e' at index 1
+
       const stats = engine.getStats();
       expect(stats.accuracy).toBe(50);
       expect(stats.errors).toBe(1);

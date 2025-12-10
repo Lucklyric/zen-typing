@@ -180,7 +180,7 @@ export const customTextStorage = {
           }
 
           const normalizedItem = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
             text: item.text.trim(),
             mode: item.mode || 'normal',
             referenceText: item.referenceText ? item.referenceText.trim() : undefined,

@@ -27,10 +27,10 @@ class AudioManager {
   }
 
   // Generate a mechanical keyboard sound
-  playKeystroke(isCorrect = true) {
+  async playKeystroke(isCorrect = true) {
     if (!this.enabled || !this.audioContext) return;
 
-    this.resumeAudioContext();
+    await this.resumeAudioContext();
 
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
@@ -70,10 +70,10 @@ class AudioManager {
   }
 
   // Space bar sound - slightly different
-  playSpacebar(isCorrect = true) {
+  async playSpacebar(isCorrect = true) {
     if (!this.enabled || !this.audioContext) return;
 
-    this.resumeAudioContext();
+    await this.resumeAudioContext();
 
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
@@ -107,10 +107,10 @@ class AudioManager {
   }
 
   // Backspace sound
-  playBackspace() {
+  async playBackspace() {
     if (!this.enabled || !this.audioContext) return;
 
-    this.resumeAudioContext();
+    await this.resumeAudioContext();
 
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
@@ -132,10 +132,10 @@ class AudioManager {
   }
 
   // Completion sound
-  playCompletion() {
+  async playCompletion() {
     if (!this.enabled || !this.audioContext) return;
 
-    this.resumeAudioContext();
+    await this.resumeAudioContext();
 
     // Play a nice chord progression
     const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5

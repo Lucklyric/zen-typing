@@ -134,19 +134,142 @@
 
 /* Respect reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
-  .animate-slide-up, 
-  .animate-fade-in, 
-  .animate-scale-in, 
-  .cursor-blink {
+  .animate-slide-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .cursor-blink,
+  .animate-blink,
+  .animate-shake,
+  /* Cyber theme animations */
+  .animate-glitch,
+  .animate-cyber-glow,
+  .animate-cyber-pulse,
+  .animate-pulse,
+  .animate-neon-flicker {
     animation: none !important;
     transition: none !important;
   }
-  
+
   /* Provide alternative non-animated states for accessibility */
   .animate-slide-up,
   .animate-fade-in,
   .animate-scale-in {
     opacity: 1;
     transform: none;
+  }
+
+  /* Ensure blink cursor is visible when animation is disabled */
+  .animate-blink {
+    opacity: 1;
+  }
+
+  /* Ensure cyber elements remain visible without animation */
+  .animate-glitch,
+  .animate-cyber-glow,
+  .animate-cyber-pulse {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Smooth caret transition between characters */
+.caret-transition {
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus mode transitions */
+.focus-fade-out {
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.focus-mode-hidden {
+  opacity: 0;
+  transform: translateY(-16px);
+  pointer-events: none;
+  position: absolute;
+  visibility: hidden;
+}
+
+/* CYBER THEME UTILITIES */
+@layer utilities {
+  .text-shadow-neon {
+    text-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff;
+  }
+  
+  .text-shadow-neon-pink {
+    text-shadow: 0 0 5px #bc13fe, 0 0 10px #bc13fe;
+  }
+  
+  .text-shadow-cyber {
+    text-shadow: 0 0 2px rgba(0, 243, 255, 0.7);
+  }
+
+  /* Cyber scrollbar */
+  .custom-scrollbar-cyber {
+    scrollbar-width: thin;
+    scrollbar-color: #00f3ff #050505;
+  }
+  
+  .custom-scrollbar-cyber::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar-cyber::-webkit-scrollbar-track {
+    @apply bg-gray-900 rounded;
+  }
+  
+  .custom-scrollbar-cyber::-webkit-scrollbar-thumb {
+    @apply bg-cyan-500/50 rounded hover:bg-cyan-400;
+    box-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+  }
+}
+
+/* Cyber Background Effect */
+.cyber-grid-bg {
+  background-color: #050505;
+  background-image: 
+    linear-gradient(transparent 95%, rgba(0, 243, 255, 0.1) 50%),
+    linear-gradient(90deg, transparent 95%, rgba(0, 243, 255, 0.1) 50%);
+  background-size: 40px 40px;
+  position: relative;
+}
+
+.cyber-grid-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, transparent 0%, #050505 90%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* CRT Scanline Effect Overlay */
+.cyber-scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0),
+    rgba(255,255,255,0) 50%,
+    rgba(0,0,0,0.2) 50%,
+    rgba(0,0,0,0.2)
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 10; /* Below modals (z-50+) but above content */
+  opacity: 0.15;
+}
+
+/* Respect reduced motion for scanlines too */
+@media (prefers-reduced-motion: reduce) {
+  .cyber-scanlines {
+    display: none;
   }
 }

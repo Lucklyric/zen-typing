@@ -1,8 +1,14 @@
 const SETTINGS_KEY = 'zen-typing-settings';
 
+// Valid theme preference values
+const VALID_THEME_PREFERENCES = ['light', 'dark', 'system', 'geek', 'cyber'];
+
 // Default settings
 const DEFAULT_SETTINGS = {
-  theme: 'normal', // 'normal' or 'geek'
+  theme: 'normal', // 'normal' or 'geek' - legacy, kept for compatibility
+  themePreference: 'system', // 'light' | 'dark' | 'system' | 'geek'
+  themeExplicitlySet: false, // boolean - tracks if user has explicitly set theme
+  focusMode: false, // boolean - whether focus mode is active
   ipaDisplay: 'toggle', // 'toggle', 'hover', 'click', 'always' - future feature
   showIPA: false,
   dictationMode: false,
@@ -20,20 +26,49 @@ const DEFAULT_SETTINGS = {
   centerAreaHeight: 500 // Center input area height in pixels (300 - 1000)
 };
 
+// Validate themePreference value
+const validateThemePreference = (value) => {
+  return VALID_THEME_PREFERENCES.includes(value) ? value : 'system';
+};
+
+// Migrate settings from old format to new format
+const migrateSettings = (settings) => {
+  // If old 'theme' exists but no 'themePreference', migrate
+  if (settings.theme && !settings.themePreference) {
+    if (settings.theme === 'geek') {
+      settings.themePreference = 'geek';
+    } else {
+      // Normal theme users get system detection
+      settings.themePreference = 'system';
+    }
+    settings.themeExplicitlySet = true; // They had a setting
+  }
+
+  // Validate themePreference
+  if (settings.themePreference) {
+    settings.themePreference = validateThemePreference(settings.themePreference);
+  }
+
+  return settings;
+};
+
 export const settingsStorage = {
   // Get all settings or a specific setting
   get(key = null) {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       const settings = stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
-      
+
       // Merge with defaults to ensure all keys exist
-      const merged = { ...DEFAULT_SETTINGS, ...settings };
-      
+      let merged = { ...DEFAULT_SETTINGS, ...settings };
+
+      // Apply migration for existing users
+      merged = migrateSettings(merged);
+
       if (key) {
         return merged[key] !== undefined ? merged[key] : DEFAULT_SETTINGS[key];
       }
-      
+
       return merged;
     } catch (error) {
       console.error('Failed to load settings:', error);

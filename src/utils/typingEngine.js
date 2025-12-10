@@ -154,6 +154,10 @@ export class TypingEngine {
 
   skipWord() {
     if (this.currentWordIndex < this.words.length - 1) {
+      // Add remaining characters of current word as placeholders to maintain consistency
+      const currentWord = this.getCurrentWord();
+      const remaining = currentWord.length - this.currentCharIndex;
+      this.typedText += ' '.repeat(remaining + 1); // +1 for word space
       this.currentWordIndex++;
       this.currentCharIndex = 0;
       return true;
@@ -201,6 +205,17 @@ export class TypingEngine {
   }
 
   getStats() {
+    if (!this.startTime || this.keystrokes === 0) {
+      return {
+        grossWPM: 0,
+        netWPM: 0,
+        accuracy: 100,
+        duration: 0,
+        errors: 0,
+        keystrokes: 0
+      };
+    }
+
     const duration = (this.endTime || Date.now()) - this.startTime;
     const minutes = duration / 60000;
     const totalChars = this.typedText.length;
