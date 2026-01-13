@@ -56,6 +56,10 @@ function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const shortcutsButtonRef = useRef(null);
 
+  // Track typing progress for tab switch warning (US4)
+  const [hasTypingProgress, setHasTypingProgress] = useState(false);
+  const [pendingSection, setPendingSection] = useState(null);
+
   // Focus mode state
   const [focusMode, setFocusMode] = useState(() => settingsStorage.get('focusMode'));
 
@@ -136,14 +140,15 @@ function App() {
           setDictationMode(prev => !prev);
           return;
         }
-        // Ctrl/Cmd + T: Toggle theme (cycle through light/dark/geek/cyber)
+        // Ctrl/Cmd + T: Toggle theme (cycle through light/dark/system/geek/cyber)
         if (key === 't') {
           e.preventDefault();
           e.stopPropagation();
           setThemePreference(prev => {
-            // Simple cycle: light -> dark -> geek -> cyber -> light
-            if (prev === 'light' || prev === 'system') return 'dark';
-            if (prev === 'dark') return 'geek';
+            // Full cycle: light -> dark -> system -> geek -> cyber -> light
+            if (prev === 'light') return 'dark';
+            if (prev === 'dark') return 'system';
+            if (prev === 'system') return 'geek';
             if (prev === 'geek') return 'cyber';
             return 'light';
           });
@@ -220,11 +225,39 @@ function App() {
 
   const handleComplete = (stats) => {
     const wordCount = selectedEntry.text.trim().split(/\s+/).length;
-    setCompletedSessions(prev => [...prev, { 
-      ...stats, 
+    setCompletedSessions(prev => [...prev, {
+      ...stats,
       timestamp: Date.now(),
-      wordCount 
+      wordCount
     }]);
+    setHasTypingProgress(false); // Reset progress on completion
+  };
+
+  // Handle typing progress updates (US4)
+  const handleProgressChange = (position) => {
+    setHasTypingProgress(position > 0);
+  };
+
+  // Handle tab switching with progress warning (US4)
+  const handleSectionChange = (newSection) => {
+    if (hasTypingProgress && newSection !== activeSection) {
+      setPendingSection(newSection);
+    } else {
+      setActiveSection(newSection);
+      setHasTypingProgress(false);
+    }
+  };
+
+  const confirmSectionChange = () => {
+    if (pendingSection) {
+      setActiveSection(pendingSection);
+      setHasTypingProgress(false);
+      setPendingSection(null);
+    }
+  };
+
+  const cancelSectionChange = () => {
+    setPendingSection(null);
   };
 
   const toggleSound = () => {
@@ -384,8 +417,10 @@ function App() {
               <button
                 onClick={() => {
                   setThemePreference(prev => {
-                    if (prev === 'light' || prev === 'system') return 'dark';
-                    if (prev === 'dark') return 'geek';
+                    // Full cycle: light -> dark -> system -> geek -> cyber -> light
+                    if (prev === 'light') return 'dark';
+                    if (prev === 'dark') return 'system';
+                    if (prev === 'system') return 'geek';
                     if (prev === 'geek') return 'cyber';
                     return 'light';
                   });
@@ -538,10 +573,11 @@ function App() {
                         : 'bg-white dark:bg-gray-800'
                     }`}
                   >
-                    <TypingArea 
+                    <TypingArea
                       key={selectedEntry.text}
-                      text={selectedEntry.text} 
+                      text={selectedEntry.text}
                       onComplete={handleComplete}
+                      onProgressChange={handleProgressChange}
                       showIPA={showIPA}
                       dictationMode={dictationMode}
                       theme={theme}
@@ -573,7 +609,7 @@ function App() {
                 : 'bg-gray-100 dark:bg-gray-700'
             }`}>
               <button
-                onClick={() => setActiveSection('practice')}
+                onClick={() => handleSectionChange('practice')}
                 className={`flex-1 px-4 py-2 min-h-[44px] rounded-md transition-all ${
                   theme === 'geek'
                     ? `font-mono ${
@@ -597,7 +633,7 @@ function App() {
                 {theme === 'geek' ? '[>] PRACTICE.TEMPLATES' : theme === 'cyber' ? '>> PRACTICE_MODULES' : 'Practice Templates'}
               </button>
               <button
-                onClick={() => setActiveSection('custom')}
+                onClick={() => handleSectionChange('custom')}
                 className={`flex-1 px-4 py-2 min-h-[44px] rounded-md transition-all ${
                   theme === 'geek'
                     ? `font-mono ${
@@ -871,6 +907,68 @@ function App() {
         }}
         theme={theme}
       />
+
+      {/* Progress Warning Modal (US4) */}
+      {pendingSection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`max-w-sm mx-4 p-6 rounded-xl shadow-2xl ${
+            theme === 'geek'
+              ? 'bg-black border border-green-500/50 shadow-green-500/20'
+              : theme === 'cyber'
+              ? 'bg-black/90 border border-cyan-500/50 shadow-cyan-500/30'
+              : 'bg-white dark:bg-gray-800'
+          }`}>
+            <h3 className={`text-lg font-semibold mb-3 ${
+              theme === 'geek'
+                ? 'text-green-400 font-mono'
+                : theme === 'cyber'
+                ? 'text-cyan-400 font-mono'
+                : 'text-gray-900 dark:text-gray-100'
+            }`}>
+              {theme === 'geek' ? '> WARNING.UNSAVED' : theme === 'cyber' ? '>> DATA_LOSS_WARNING' : 'Discard Progress?'}
+            </h3>
+            <p className={`mb-6 ${
+              theme === 'geek'
+                ? 'text-green-400/70 font-mono text-sm'
+                : theme === 'cyber'
+                ? 'text-cyan-600 font-mono text-sm'
+                : 'text-gray-600 dark:text-gray-400'
+            }`}>
+              {theme === 'geek'
+                ? '// current.session.progress will be lost'
+                : theme === 'cyber'
+                ? 'Current typing session will be terminated.'
+                : 'You have an active typing session. Switching tabs will reset your progress.'}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelSectionChange}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  theme === 'geek'
+                    ? 'bg-green-900/30 border border-green-500/30 text-green-400 hover:bg-green-900/50 font-mono'
+                    : theme === 'cyber'
+                    ? 'bg-cyan-900/30 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/50 font-mono'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {theme === 'geek' ? '[CANCEL]' : theme === 'cyber' ? 'ABORT' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmSectionChange}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  theme === 'geek'
+                    ? 'bg-red-900/50 border border-red-500/50 text-red-400 hover:bg-red-900/70 font-mono'
+                    : theme === 'cyber'
+                    ? 'bg-fuchsia-900/50 border border-fuchsia-500/50 text-fuchsia-400 hover:bg-fuchsia-900/70 font-mono'
+                    : 'bg-red-500 text-white hover:bg-red-600'
+                }`}
+              >
+                {theme === 'geek' ? '[CONFIRM]' : theme === 'cyber' ? 'PROCEED' : 'Discard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -69,8 +69,8 @@ const WordDisplay = ({
           textColor = 'text-emerald-400/40';
         }
       } else if (isCurrentChar) {
-        textColor = 'text-black';
-        bgColor = 'bg-green-400 animate-blink'; // Blinking block cursor
+        textColor = 'text-green-950';
+        bgColor = 'bg-green-400 ring-2 ring-green-300 shadow-[0_0_10px_#4ade80]'; // Solid cursor with glow
       } else if (isTyped) {
         if (hasError) {
           textColor = 'text-orange-400'; // Better visibility than red on dark bg
@@ -100,8 +100,8 @@ const WordDisplay = ({
           textColor = 'text-cyan-700/50';
         }
       } else if (isCurrentChar) {
-        textColor = 'text-black font-bold';
-        bgColor = 'bg-cyan-400 shadow-[0_0_15px_#00f3ff] animate-pulse'; // Glowing block cursor
+        textColor = 'text-cyan-950 font-bold';
+        bgColor = 'bg-cyan-400 shadow-cyber animate-cyber-cursor'; // Color-shifting glow cursor
       } else if (isTyped) {
         if (hasError) {
           textColor = 'text-fuchsia-500 text-shadow-neon-pink';
@@ -131,8 +131,8 @@ const WordDisplay = ({
           textColor = 'text-gray-400 dark:text-gray-500';
         }
       } else if (isCurrentChar) {
-        textColor = 'text-gray-900 dark:text-gray-100';
-        bgColor = 'bg-blue-200 dark:bg-blue-800 border-l-2 border-blue-500'; // Caret style cursor
+        textColor = 'text-blue-900 dark:text-blue-100';
+        bgColor = 'bg-blue-100 dark:bg-blue-700/90 ring-2 ring-blue-400 dark:ring-blue-500 ring-inset border-l-2 border-blue-500'; // Enhanced visibility cursor
       } else if (isTyped) {
         if (hasError) {
           textColor = 'text-red-700 dark:text-red-400';
@@ -194,8 +194,8 @@ const WordDisplay = ({
           displayChar = typedSpaceChar;
         }
       } else if (isCurrentSpace) {
-        textColor = 'text-black';
-        bgColor = 'bg-green-400 animate-blink'; // Blinking block cursor
+        textColor = 'text-green-950';
+        bgColor = 'bg-green-400 ring-2 ring-green-300 shadow-[0_0_10px_#4ade80]'; // Solid cursor with glow
       } else if (spaceTyped) {
         if (hasSpaceError || !isSpaceCharCorrect) {
           textColor = 'text-orange-400';
@@ -216,8 +216,8 @@ const WordDisplay = ({
           displayChar = typedSpaceChar;
         }
       } else if (isCurrentSpace) {
-        textColor = 'text-black';
-        bgColor = 'bg-cyan-400 shadow-[0_0_15px_#00f3ff] animate-pulse'; // Glowing block cursor
+        textColor = 'text-cyan-950';
+        bgColor = 'bg-cyan-400 shadow-cyber animate-cyber-cursor'; // Color-shifting glow cursor
       } else if (spaceTyped) {
         if (hasSpaceError || !isSpaceCharCorrect) {
           textColor = 'text-fuchsia-500 text-shadow-neon-pink';
@@ -238,8 +238,8 @@ const WordDisplay = ({
           displayChar = typedSpaceChar;
         }
       } else if (isCurrentSpace) {
-        textColor = 'text-gray-900 dark:text-gray-100';
-        bgColor = 'bg-blue-200 dark:bg-blue-800 border-l-2 border-blue-500'; // Caret style cursor
+        textColor = 'text-blue-900 dark:text-blue-100';
+        bgColor = 'bg-blue-100 dark:bg-blue-700/90 ring-2 ring-blue-400 dark:ring-blue-500 ring-inset border-l-2 border-blue-500'; // Enhanced visibility cursor
       } else if (spaceTyped) {
         if (hasSpaceError || !isSpaceCharCorrect) {
           textColor = 'text-red-700 dark:text-red-400';

@@ -80,10 +80,12 @@ const SettingsMenu = ({
       ref={menuRef}
       role="menu"
       aria-orientation="vertical"
-      className={`absolute right-0 top-full mt-2 w-64 rounded-lg shadow-xl z-50 overflow-hidden ${
+      className={`absolute right-0 top-full mt-2 w-64 rounded-lg shadow-xl z-50 overflow-hidden max-h-[70vh] overflow-y-auto ${
         theme === 'geek'
-          ? 'bg-black border border-green-500/30 shadow-green-500/20'
-          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+          ? 'bg-black border border-green-500/30 shadow-green-500/20 custom-scrollbar-geek'
+          : theme === 'cyber'
+          ? 'bg-black/90 border border-cyan-500/30 shadow-cyan-500/20 custom-scrollbar-cyber backdrop-blur-sm'
+          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 custom-scrollbar'
       }`}
     >
       {/* Mobile-only toggles - IPA and Sound */}

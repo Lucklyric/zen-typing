@@ -3,7 +3,7 @@ import WordDisplay from './WordDisplay';
 import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { audioManager } from '../utils/audioManager';
 
-const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, theme = 'normal' }) => {
+const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dictationMode = false, theme = 'normal' }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -137,6 +137,10 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
       setWordErrors({});
       setStats(null);
       setShakeWord(null);
+      // Notify parent that progress was reset (US4)
+      if (onProgressChange) {
+        onProgressChange(0);
+      }
       return;
     }
 
@@ -144,10 +148,15 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
       const prevWordIndex = engine.currentWordIndex;
       const prevCharIndex = engine.currentCharIndex;
       const result = engine.processKeystroke(e.key);
-      
+
       if (result) {
         setCurrentWordIndex(engine.currentWordIndex);
         setCurrentCharIndex(engine.currentCharIndex);
+
+        // Notify parent of progress change (US4)
+        if (onProgressChange) {
+          onProgressChange(engine.typedText.length);
+        }
 
         // Play appropriate sound based on key and correctness
         if (e.key === ' ') {
@@ -223,10 +232,12 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
     <div className="w-full h-full flex flex-col">
       {/* Progress Bar */}
       <div className="mb-4 flex-shrink-0">
-        <div 
-          className={`h-2 rounded-full overflow-hidden ${
+        <div
+          className={`h-1.5 rounded-full overflow-hidden ${
             theme === 'geek'
               ? 'bg-green-900/30 border border-green-500/20'
+              : theme === 'cyber'
+              ? 'bg-cyan-900/30 border border-cyan-500/20'
               : 'bg-gray-200 dark:bg-gray-700'
           }`}
           role="progressbar"
@@ -235,10 +246,12 @@ const TypingArea = ({ text, onComplete, showIPA = false, dictationMode = false, 
           aria-valuemax="100"
           aria-label="Typing progress"
         >
-          <div 
-            className={`h-full transition-all duration-300 ease-out ${
+          <div
+            className={`h-full transition-all duration-300 ease-out motion-reduce:transition-none ${
               theme === 'geek'
-                ? 'bg-green-400 shadow-lg shadow-green-400/50'
+                ? 'bg-green-400 shadow-[0_0_8px_#22c55e]'
+                : theme === 'cyber'
+                ? 'bg-gradient-to-r from-cyan-400 via-cyan-500 to-purple-500 shadow-[0_0_10px_#00f3ff]'
                 : 'bg-gradient-to-r from-indigo-500 to-purple-500'
             }`}
             style={{ width: `${progress}%` }}
