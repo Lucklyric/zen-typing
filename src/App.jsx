@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import TypingArea from './components/TypingArea';
 import ReferenceWorkspace from './components/ReferenceWorkspace';
 import ResizableContainer from './components/ResizableContainer';
@@ -8,9 +8,36 @@ import SessionStats from './components/SessionStats';
 import Footer from './components/Footer';
 import SettingsMenu from './components/SettingsMenu';
 import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
+import AuthButton from './components/AuthButton';
+import SyncStatus from './components/SyncStatus';
 import { sampleTexts } from './data/sampleTexts';
 import { audioManager } from './utils/audioManager';
 import { settingsStorage } from './utils/settingsStorage';
+import { isSupabaseConfigured } from './utils/supabaseClient';
+import {
+  signInWithMagicLink,
+  signOut as authSignOut,
+  onAuthStateChange,
+  getSession,
+} from './utils/authService';
+import {
+  subscribeSyncState,
+  initNetworkListeners,
+  resetSyncState,
+  processPendingChanges,
+  setOnReconnectCallback,
+  setSyncStatus as updateSyncServiceStatus,
+  migrateLocalToCloud,
+  checkCloudData,
+  loadSettingsFromCloud,
+  loadCustomTextsFromCloud,
+  syncCustomTextsToCloud,
+  syncSettingsToCloud,
+  deleteCustomTextFromCloud,
+  clearAllCustomTextsFromCloud,
+  clearPendingChanges,
+} from './utils/syncService';
+import { customTextStorage } from './utils/customTextStorage';
 
 function App() {
   // Convert selectedText to selectedEntry object
@@ -66,6 +93,17 @@ function App() {
   // Track window height for responsive layout
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 
+  // Auth state (Cloud Sync)
+  const [user, setUser] = useState(null);
+  const [authState, setAuthState] = useState('idle'); // 'idle' | 'loading' | 'awaiting' | 'error'
+  const [authError, setAuthError] = useState(null); // eslint-disable-line no-unused-vars -- Will be used for error display
+  const activeUserIdRef = useRef(null); // Track active user to prevent race conditions
+
+  // Sync state (Cloud Sync)
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'offline' | 'error'
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0); // Triggers CustomTextHistory refresh
+  const [syncError, setSyncError] = useState(null);
+
   // Window resize listener
   useEffect(() => {
     const handleResize = () => setWindowHeight(window.innerHeight);
@@ -80,6 +118,173 @@ function App() {
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
+
+  // Auth state listener (Cloud Sync)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    // Get initial session
+    getSession().then(({ session }) => {
+      setUser(session?.user || null);
+      activeUserIdRef.current = session?.user?.id || null;
+    });
+
+    // Subscribe to auth changes
+    const unsubscribe = onAuthStateChange(async (event, session) => {
+      const newUserId = session?.user?.id || null;
+      setUser(session?.user || null);
+      activeUserIdRef.current = newUserId;
+
+      // Trigger sync on SIGNED_IN (new sign-in) or INITIAL_SESSION (returning user)
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        setAuthState('idle');
+
+        // Trigger migration/sync
+        const userId = session.user.id;
+        console.log(`[Sync] ${event} detected, userId:`, userId);
+
+        const cloudData = await checkCloudData(userId);
+        // Bail out if user changed during async operation
+        if (activeUserIdRef.current !== userId) {
+          console.log('[Sync] User changed during sync, aborting');
+          return;
+        }
+        console.log('[Sync] Cloud data check:', cloudData);
+
+        const localTexts = customTextStorage.getAll();
+        const hasStoredSettings = settingsStorage.hasStoredSettings();
+        const localSettings = hasStoredSettings ? settingsStorage.get() : {};
+        const hasLocalData = localTexts.length > 0 || hasStoredSettings;
+        console.log('[Sync] Local data:', { textsCount: localTexts.length, hasStoredSettings });
+
+        if (cloudData.hasSettings || cloudData.hasTexts) {
+          console.log('[Sync] Cloud has data, loading from cloud...');
+          // Cloud has data - load from cloud (cloud is source of truth)
+          const [settingsResult, textsResult] = await Promise.all([
+            loadSettingsFromCloud(userId),
+            loadCustomTextsFromCloud(userId),
+          ]);
+
+          // Bail out if user changed during async operation
+          if (activeUserIdRef.current !== userId) {
+            console.log('[Sync] User changed during sync, aborting');
+            return;
+          }
+          console.log('[Sync] Loaded from cloud:', { settings: settingsResult, texts: textsResult });
+
+          // Apply cloud settings to local
+          if (settingsResult.settings) {
+            Object.entries(settingsResult.settings).forEach(([key, value]) => {
+              settingsStorage.set(key, value);
+            });
+            // Update React state for ALL settings that have state
+            const s = settingsResult.settings;
+            if (s.showIPA !== undefined) setShowIPA(s.showIPA);
+            if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
+            if (s.dictationMode !== undefined) setDictationMode(s.dictationMode);
+            if (s.themePreference !== undefined) setThemePreference(s.themePreference);
+            if (s.showHistory !== undefined) setShowHistory(s.showHistory);
+            if (s.themeExplicitlySet !== undefined) setThemeExplicitlySet(s.themeExplicitlySet);
+            if (s.activeSection !== undefined) setActiveSection(s.activeSection);
+            if (s.splitRatio !== undefined) setSplitRatio(s.splitRatio);
+            if (s.centerAreaHeight !== undefined) setCenterAreaHeight(s.centerAreaHeight);
+            if (s.focusMode !== undefined) setFocusMode(s.focusMode);
+          }
+
+          // Apply cloud texts to local (replace local with cloud)
+          if (textsResult.texts && textsResult.texts.length > 0) {
+            console.log('[Sync] Replacing local texts with cloud texts');
+            customTextStorage.replaceAll(textsResult.texts);
+            setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
+          } else if (localTexts.length > 0) {
+            // Cloud has settings but no texts - migrate local texts to cloud
+            console.log('[Sync] Cloud has settings but no texts, migrating local texts...');
+            const textsResult2 = await syncCustomTextsToCloud(localTexts, userId);
+            // Bail out if user changed
+            if (activeUserIdRef.current !== userId) {
+              console.log('[Sync] User changed during sync, aborting');
+              return;
+            }
+            console.log('[Sync] Migration result:', textsResult2);
+            if (textsResult2.success && textsResult2.insertedTexts?.length > 0) {
+              customTextStorage.updateWithDbIds(textsResult2.insertedTexts);
+              setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
+            }
+          }
+        } else if (hasLocalData) {
+          // No cloud data but has local data - migrate local to cloud
+          console.log('[Sync] No cloud data, migrating local data to cloud...');
+          const migrateResult = await migrateLocalToCloud(userId, localSettings, localTexts);
+          // Bail out if user changed
+          if (activeUserIdRef.current !== userId) {
+            console.log('[Sync] User changed during sync, aborting');
+            return;
+          }
+          console.log('[Sync] Migration result:', migrateResult);
+          // Update local storage with database IDs so future syncs work correctly
+          if (migrateResult.success && migrateResult.insertedTexts) {
+            customTextStorage.updateWithDbIds(migrateResult.insertedTexts);
+            setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
+          }
+        } else {
+          console.log('[Sync] No data to sync (no cloud data, no local data)');
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setAuthState('idle');
+        activeUserIdRef.current = null;
+        resetSyncState();
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Sync state listener (Cloud Sync)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    // Subscribe to sync state changes with re-render optimization
+    const unsubscribe = subscribeSyncState((state) => {
+      setSyncStatus((prev) => (prev === state.status ? prev : state.status));
+      setSyncError((prev) => (prev === state.error ? prev : state.error));
+    });
+
+    // Initialize network listeners
+    const cleanupNetwork = initNetworkListeners();
+
+    return () => {
+      unsubscribe();
+      cleanupNetwork();
+    };
+  }, []);
+
+  // Set up reconnect callback to process pending changes (Cloud Sync)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    setOnReconnectCallback(async () => {
+      if (user) {
+        const result = await processPendingChanges(user.id);
+        // Always update local IDs with database UUIDs, even on partial failure
+        // This prevents duplicate inserts for texts that succeeded
+        if (result.insertedTexts?.length > 0) {
+          customTextStorage.updateWithDbIds(result.insertedTexts);
+        }
+        if (result.success) {
+          updateSyncServiceStatus('synced');
+        } else if (result.offline) {
+          // Still offline, keep status as offline
+          updateSyncServiceStatus('offline');
+        } else {
+          updateSyncServiceStatus('error', result.error);
+        }
+      } else {
+        updateSyncServiceStatus('synced');
+      }
+    });
+
+    return () => setOnReconnectCallback(null);
+  }, [user]);
 
   // Apply dark class to document based on computed theme
   useEffect(() => {
@@ -210,6 +415,23 @@ function App() {
     settingsStorage.set('centerAreaHeight', centerAreaHeight);
   }, [centerAreaHeight]);
 
+  // Sync settings to cloud when they change (debounced)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user) return;
+
+    // Debounce to avoid rapid API calls
+    const timeoutId = setTimeout(async () => {
+      const allSettings = settingsStorage.get();
+      console.log('[Sync] Settings changed, syncing to cloud...');
+      const result = await syncSettingsToCloud(allSettings, user.id);
+      if (!result.success) {
+        console.error('[Sync] Settings sync failed:', result.error);
+      }
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [user, themePreference, showIPA, soundEnabled, dictationMode, showHistory, focusMode, splitRatio, centerAreaHeight]);
+
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
       // Legacy string format
@@ -222,6 +444,51 @@ function App() {
       setSelectedEntry(textOrEntry);
     }
   };
+
+  // Handle new custom text added - sync only the new entry to cloud
+  const handleTextAdded = useCallback(async (savedEntry) => {
+    if (!isSupabaseConfigured || !user) return;
+
+    console.log('[Sync] New text added, syncing to cloud...');
+    // Only sync the new entry, not all texts (avoids duplicates and improves perf)
+    const result = await syncCustomTextsToCloud([savedEntry], user.id);
+
+    if (result.success && result.insertedTexts?.length > 0) {
+      customTextStorage.updateWithDbIds(result.insertedTexts);
+      setHistoryRefreshKey((k) => k + 1);
+      console.log('[Sync] New text synced successfully');
+    } else if (!result.success) {
+      console.error('[Sync] Failed to sync new text:', result.error);
+    }
+  }, [user]);
+
+  // Handle custom text deleted - sync deletion to cloud
+  const handleTextDeleted = useCallback(async (textId) => {
+    if (!isSupabaseConfigured || !user) return;
+
+    console.log('[Sync] Text deleted, syncing to cloud...');
+    const result = await deleteCustomTextFromCloud(textId, user.id);
+
+    if (!result.success) {
+      console.error('[Sync] Failed to sync text deletion:', result.error);
+    } else {
+      console.log('[Sync] Text deletion synced successfully');
+    }
+  }, [user]);
+
+  // Handle clear all texts - sync to cloud
+  const handleClearAllTexts = useCallback(async () => {
+    if (!isSupabaseConfigured || !user) return;
+
+    console.log('[Sync] Clearing all texts, syncing to cloud...');
+    const result = await clearAllCustomTextsFromCloud(user.id);
+
+    if (!result.success) {
+      console.error('[Sync] Failed to sync clear all:', result.error);
+    } else {
+      console.log('[Sync] Clear all synced successfully');
+    }
+  }, [user]);
 
   const handleComplete = (stats) => {
     const wordCount = selectedEntry.text.trim().split(/\s+/).length;
@@ -263,6 +530,120 @@ function App() {
   const toggleSound = () => {
     setSoundEnabled(prev => !prev);
   };
+
+  // Auth handlers (Cloud Sync)
+  const handleSignIn = useCallback(async (email) => {
+    setAuthState('loading');
+    setAuthError(null);
+
+    const result = await signInWithMagicLink(email);
+
+    if (result.success) {
+      setAuthState('awaiting');
+    } else {
+      setAuthState('error');
+      setAuthError(result.error);
+    }
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    const result = await authSignOut();
+    if (!result.success) {
+      console.error('Sign out error:', result.error);
+    }
+  }, []);
+
+  const handleAuthCancel = useCallback(() => {
+    setAuthState('idle');
+    setAuthError(null);
+  }, []);
+
+  const handleSyncRetry = useCallback(async () => {
+    if (!user) return;
+
+    // Re-attempt pending changes
+    const result = await processPendingChanges(user.id);
+    if (!result.success) {
+      console.error('Sync retry failed:', result.error);
+    }
+  }, [user]);
+
+  const handleForceSync = useCallback(async () => {
+    if (!user) return;
+
+    console.log('[Sync] Force sync triggered by user');
+    const userId = user.id;
+
+    // Get current local data
+    const localTexts = customTextStorage.getAll();
+    const localSettings = settingsStorage.get();
+    console.log(`[Sync] Force sync: ${localTexts.length} local texts, settings:`, Object.keys(localSettings).length);
+
+    let pushSucceeded = true;
+
+    // Sync local settings to cloud
+    const settingsSyncResult = await syncSettingsToCloud(localSettings, userId);
+    console.log('[Sync] Force sync settings result:', settingsSyncResult);
+    if (!settingsSyncResult.success) {
+      console.error('[Sync] Force sync settings push failed, skipping pull');
+      pushSucceeded = false;
+    }
+
+    // Sync local texts to cloud
+    if (localTexts.length > 0) {
+      const syncResult = await syncCustomTextsToCloud(localTexts, userId);
+      console.log('[Sync] Force sync texts result:', syncResult);
+
+      if (syncResult.success && syncResult.insertedTexts?.length > 0) {
+        customTextStorage.updateWithDbIds(syncResult.insertedTexts);
+      } else if (!syncResult.success) {
+        console.error('[Sync] Force sync texts push failed, skipping pull');
+        pushSucceeded = false;
+      }
+    }
+
+    // Only pull from cloud if push succeeded to avoid data loss
+    if (!pushSucceeded) {
+      console.warn('[Sync] Force sync: push failed, not pulling from cloud to avoid data loss');
+      return;
+    }
+
+    // Load settings from cloud and apply
+    const cloudSettings = await loadSettingsFromCloud(userId);
+    console.log('[Sync] Force sync cloud settings:', cloudSettings);
+
+    if (cloudSettings.settings) {
+      Object.entries(cloudSettings.settings).forEach(([key, value]) => {
+        settingsStorage.set(key, value);
+      });
+      // Update React state for ALL settings that have state
+      const s = cloudSettings.settings;
+      if (s.showIPA !== undefined) setShowIPA(s.showIPA);
+      if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
+      if (s.dictationMode !== undefined) setDictationMode(s.dictationMode);
+      if (s.themePreference !== undefined) setThemePreference(s.themePreference);
+      if (s.showHistory !== undefined) setShowHistory(s.showHistory);
+      if (s.themeExplicitlySet !== undefined) setThemeExplicitlySet(s.themeExplicitlySet);
+      if (s.activeSection !== undefined) setActiveSection(s.activeSection);
+      if (s.splitRatio !== undefined) setSplitRatio(s.splitRatio);
+      if (s.centerAreaHeight !== undefined) setCenterAreaHeight(s.centerAreaHeight);
+      if (s.focusMode !== undefined) setFocusMode(s.focusMode);
+    }
+
+    // Load texts from cloud to ensure we have latest
+    const cloudResult = await loadCustomTextsFromCloud(userId);
+    console.log('[Sync] Force sync cloud texts:', cloudResult);
+
+    if (cloudResult.texts && cloudResult.texts.length > 0) {
+      customTextStorage.replaceAll(cloudResult.texts);
+      setHistoryRefreshKey((k) => k + 1);
+    }
+
+    // Clear pending changes after successful force sync to prevent duplicates on reconnect
+    clearPendingChanges();
+
+    console.log('[Sync] Force sync complete');
+  }, [user]);
 
   // Determine if we should show reference workspace based on whether entry has reference text
   const shouldShowReference = selectedEntry.referenceText && selectedEntry.referenceText.trim().length > 0;
@@ -452,6 +833,29 @@ function App() {
                   {theme === 'geek' ? 'CTRL+T' : theme === 'cyber' ? 'CTRL+T' : '⌘T'}
                 </kbd>
               </button>
+
+              {/* Cloud Sync: Sync Status & Auth Button */}
+              {isSupabaseConfigured && (
+                <>
+                  {user && (
+                    <SyncStatus
+                      theme={theme}
+                      status={syncStatus}
+                      errorMessage={syncError}
+                      onRetry={handleSyncRetry}
+                      onForceSync={handleForceSync}
+                    />
+                  )}
+                  <AuthButton
+                    theme={theme}
+                    user={user}
+                    authState={authState}
+                    onSignIn={handleSignIn}
+                    onSignOut={handleSignOut}
+                    onCancel={handleAuthCancel}
+                  />
+                </>
+              )}
 
               {/* Keyboard Shortcuts "?" Button */}
               <button
@@ -745,14 +1149,18 @@ function App() {
                       }
                     </button>
                   </div>
-                  <TextInput 
-                    onTextSubmit={handleTextSelect} 
+                  <TextInput
+                    onTextSubmit={handleTextSelect}
+                    onTextAdded={handleTextAdded}
                     theme={theme}
                   />
-                  <CustomTextHistory 
-                    isVisible={showHistory} 
-                    onSelectText={handleTextSelect} 
+                  <CustomTextHistory
+                    isVisible={showHistory}
+                    onSelectText={handleTextSelect}
+                    onTextDeleted={handleTextDeleted}
+                    onClearAll={handleClearAllTexts}
                     theme={theme}
+                    refreshKey={historyRefreshKey}
                   />
                 </div>
               )}

@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { customTextStorage } from '../utils/customTextStorage';
 
-function CustomTextHistory({ onSelectText, isVisible, theme = 'normal' }) {
+function CustomTextHistory({ onSelectText, onTextDeleted, onClearAll, isVisible, theme = 'normal', refreshKey = 0 }) {
   const [history, setHistory] = useState([]);
   const [filteredHistory, setFilteredHistory] = useState([]);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [filter, setFilter] = useState('all'); // 'all', 'normal', 'reference'
   const [importStatus, setImportStatus] = useState(null);
 
-  // Load history on mount and when visibility changes
+  // Load history on mount, visibility changes, or refresh trigger
   useEffect(() => {
     if (isVisible) {
       loadHistory();
     }
-  }, [isVisible]);
+  }, [isVisible, refreshKey]);
 
   const loadHistory = () => {
     const texts = customTextStorage.getAll();
@@ -46,6 +46,10 @@ function CustomTextHistory({ onSelectText, isVisible, theme = 'normal' }) {
     e.stopPropagation();
     if (customTextStorage.remove(id)) {
       loadHistory();
+      // Notify parent to sync deletion to cloud
+      if (onTextDeleted) {
+        onTextDeleted(id);
+      }
     }
   };
 
@@ -55,6 +59,10 @@ function CustomTextHistory({ onSelectText, isVisible, theme = 'normal' }) {
         setHistory([]);
         setFilteredHistory([]);
         setExpandedItems(new Set());
+        // Notify parent to sync deletion to cloud
+        if (onClearAll) {
+          onClearAll();
+        }
       }
     }
   };

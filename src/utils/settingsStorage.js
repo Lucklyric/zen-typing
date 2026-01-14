@@ -53,6 +53,15 @@ const migrateSettings = (settings) => {
 };
 
 export const settingsStorage = {
+  // Check if settings have been explicitly stored (not just defaults)
+  hasStoredSettings() {
+    try {
+      return localStorage.getItem(SETTINGS_KEY) !== null;
+    } catch {
+      return false;
+    }
+  },
+
   // Get all settings or a specific setting
   get(key = null) {
     try {

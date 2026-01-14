@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { customTextStorage } from '../utils/customTextStorage';
 
-const TextInput = ({ onTextSubmit, theme = 'normal' }) => {
+const TextInput = ({ onTextSubmit, onTextAdded, theme = 'normal' }) => {
   const [text, setText] = useState('');
   const [referenceText, setReferenceText] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -10,7 +10,7 @@ const TextInput = ({ onTextSubmit, theme = 'normal' }) => {
     e.preventDefault();
     const trimmedText = text.trim();
     const trimmedRefText = referenceText.trim();
-    
+
     if (trimmedText) {
       if (trimmedRefText) {
         // Has reference text - create reference entry
@@ -19,16 +19,24 @@ const TextInput = ({ onTextSubmit, theme = 'normal' }) => {
           referenceText: trimmedRefText,
           mode: 'reference'
         };
-        customTextStorage.add(entry);
+        const savedEntry = customTextStorage.add(entry);
         onTextSubmit(entry);
+        // Notify parent to sync to cloud
+        if (onTextAdded && savedEntry) {
+          onTextAdded(savedEntry);
+        }
       } else {
         // No reference text - create normal entry
         const entry = {
           text: trimmedText,
           mode: 'normal'
         };
-        customTextStorage.add(entry);
+        const savedEntry = customTextStorage.add(entry);
         onTextSubmit(entry);
+        // Notify parent to sync to cloud
+        if (onTextAdded && savedEntry) {
+          onTextAdded(savedEntry);
+        }
       }
       setText('');
       setReferenceText('');

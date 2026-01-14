@@ -132,6 +132,64 @@ export const customTextStorage = {
     }
   },
 
+  // Replace all custom texts with new array (used for cloud sync)
+  replaceAll(texts) {
+    try {
+      // Transform cloud format to local format if needed
+      const localTexts = texts.map(t => ({
+        id: t.id || Date.now().toString(),
+        text: t.text,
+        mode: t.mode || 'normal',
+        referenceText: t.referenceText,
+        timestamp: t.createdAt ? new Date(t.createdAt).getTime() : Date.now(),
+        wordCount: t.wordCount || t.text.split(/\s+/).filter(word => word.length > 0).length,
+        charCount: t.text.length
+      }));
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localTexts));
+      return true;
+    } catch (error) {
+      console.error('Failed to replace custom texts:', error);
+      return false;
+    }
+  },
+
+  // Update local texts with database IDs after insert (match by text content)
+  updateWithDbIds(insertedTexts) {
+    if (!insertedTexts || insertedTexts.length === 0) return;
+
+    try {
+      const texts = this.getAll();
+      let updated = false;
+
+      // Create a map of text content to DB ID for quick lookup
+      const textToIdMap = new Map();
+      for (const inserted of insertedTexts) {
+        const key = `${inserted.text}|${inserted.reference_text || ''}`;
+        textToIdMap.set(key, inserted.id);
+      }
+
+      // Update local texts that match
+      const updatedTexts = texts.map(t => {
+        const key = `${t.text}|${t.referenceText || ''}`;
+        const dbId = textToIdMap.get(key);
+        if (dbId && t.id !== dbId) {
+          updated = true;
+          return { ...t, id: dbId };
+        }
+        return t;
+      });
+
+      if (updated) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTexts));
+      }
+      return updated;
+    } catch (error) {
+      console.error('Failed to update texts with DB IDs:', error);
+      return false;
+    }
+  },
+
   // Export all custom texts as JSON
   exportAll() {
     try {
