@@ -1,3 +1,5 @@
+import { version } from '../../package.json';
+
 function Footer({ theme = 'normal' }) {
   const currentYear = new Date().getFullYear();
 
@@ -140,9 +142,9 @@ function Footer({ theme = 'normal' }) {
               ? 'text-green-400/60 font-mono'
               : 'text-gray-500 dark:text-gray-400'
           }`}>
-            {theme === 'geek' 
-              ? `// copyright.©.${currentYear}.Alvin.Sun -> all.rights.reserved`
-              : `Copyright © ${currentYear} Alvin Sun. All rights reserved.`
+            {theme === 'geek'
+              ? `// zen.typing.v${version} | copyright.©.${currentYear}.Alvin.Sun -> all.rights.reserved`
+              : `Zen Typing v${version} • Copyright © ${currentYear} Alvin Sun. All rights reserved.`
             }
           </p>
           <p className={`text-xs mt-2 ${
