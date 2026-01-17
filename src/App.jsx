@@ -36,6 +36,7 @@ import {
   deleteCustomTextFromCloud,
   clearAllCustomTextsFromCloud,
   clearPendingChanges,
+  forceOverwriteRemoteWithLocal,
 } from './utils/syncService';
 import { customTextStorage } from './utils/customTextStorage';
 
@@ -141,7 +142,7 @@ function App() {
 
         // Trigger migration/sync
         const userId = session.user.id;
-        console.log(`[Sync] ${event} detected, userId:`, userId);
+        console.log(`[Sync] ${event} detected, starting sync`);
 
         const cloudData = await checkCloudData(userId);
         // Bail out if user changed during async operation
@@ -645,6 +646,42 @@ function App() {
     console.log('[Sync] Force sync complete');
   }, [user]);
 
+  // Force overwrite remote with local data (destructive)
+  const handleForceOverwrite = useCallback(async () => {
+    if (!user) return;
+
+    console.log('[Sync] Force overwrite remote triggered by user');
+    const userId = user.id;
+
+    // Get current local data
+    const localTexts = customTextStorage.getAll();
+    const localSettings = settingsStorage.get();
+    console.log(`[Sync] Force overwrite: ${localTexts.length} local texts, settings keys: ${Object.keys(localSettings).length}`);
+
+    const result = await forceOverwriteRemoteWithLocal(userId, localSettings, localTexts);
+
+    if (result.success) {
+      console.log('[Sync] Force overwrite successful');
+      setSyncError(null); // Clear any previous error
+      // Update local text IDs with new DB IDs
+      if (result.insertedTexts?.length > 0) {
+        customTextStorage.replaceAll(result.insertedTexts.map(t => ({
+          id: t.id,
+          text: t.text,
+          mode: t.mode,
+          referenceText: t.reference_text,
+          wordCount: t.word_count,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+        })));
+        setHistoryRefreshKey((k) => k + 1);
+      }
+    } else {
+      console.error('[Sync] Force overwrite failed:', result.error);
+      setSyncError(result.error || 'Force overwrite failed'); // Surface error to UI
+    }
+  }, [user]);
+
   // Determine if we should show reference workspace based on whether entry has reference text
   const shouldShowReference = selectedEntry.referenceText && selectedEntry.referenceText.trim().length > 0;
 
@@ -844,6 +881,7 @@ function App() {
                       errorMessage={syncError}
                       onRetry={handleSyncRetry}
                       onForceSync={handleForceSync}
+                      onForceOverwrite={handleForceOverwrite}
                     />
                   )}
                   <AuthButton

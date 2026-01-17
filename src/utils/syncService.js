@@ -82,6 +82,9 @@ let activeSyncCount = 0;
 // Mutex for processPendingChanges to prevent concurrent execution
 let isProcessingPending = false;
 
+// Mutex for forceOverwriteRemoteWithLocal to prevent concurrent execution
+let isForceOverwriting = false;
+
 /**
  * Get current sync state
  * @returns {SyncState}
@@ -323,6 +326,7 @@ export function resetSyncState() {
   syncState = { ...initialSyncState };
   activeSyncCount = 0; // Reset sync counter to prevent stuck 'syncing' status
   isProcessingPending = false; // Reset mutex to allow future processing
+  isForceOverwriting = false; // Reset force overwrite mutex
   persistPendingChanges([]); // Clear persisted pending changes
   subscribers.forEach((callback) => callback(getSyncState()));
 }
@@ -358,7 +362,7 @@ export async function syncSettingsToCloud(settings, userId) {
     return { success: true }; // Queued successfully
   }
 
-  console.log(`[Sync] syncSettingsToCloud: Syncing settings for user ${userId}`);
+  console.log('[Sync] syncSettingsToCloud: Syncing settings');
 
   try {
     setSyncStatus('syncing');
@@ -400,7 +404,7 @@ export async function loadSettingsFromCloud(userId) {
     return { settings: null, error: 'Supabase not configured' };
   }
 
-  console.log(`[Sync] loadSettingsFromCloud: Loading for user ${userId}`);
+  console.log('[Sync] loadSettingsFromCloud: Loading settings');
 
   try {
     setSyncStatus('syncing');
@@ -452,7 +456,7 @@ export async function syncCustomTextsToCloud(texts, userId) {
     return { success: true };
   }
 
-  console.log(`[Sync] syncCustomTextsToCloud: Processing ${texts.length} texts for user ${userId}`);
+  console.log(`[Sync] syncCustomTextsToCloud: Processing ${texts.length} texts`);
 
   try {
     setSyncStatus('syncing');
@@ -592,7 +596,7 @@ export async function loadCustomTextsFromCloud(userId) {
     return { texts: null, error: 'Supabase not configured' };
   }
 
-  console.log(`[Sync] loadCustomTextsFromCloud: Loading for user ${userId}`);
+  console.log('[Sync] loadCustomTextsFromCloud: Loading texts');
 
   try {
     setSyncStatus('syncing');
@@ -785,7 +789,7 @@ export async function clearAllCustomTextsFromCloud(userId) {
     return { success: true };
   }
 
-  console.log(`[Sync] clearAllCustomTextsFromCloud: Clearing all texts for user ${userId}`);
+  console.log('[Sync] clearAllCustomTextsFromCloud: Clearing all texts');
 
   try {
     setSyncStatus('syncing');
@@ -907,4 +911,177 @@ export async function checkCloudData(userId) {
  */
 export function clearLocalCache() {
   resetSyncState();
+}
+
+/**
+ * Force overwrite remote with local data (destructive)
+ * This completely replaces all cloud data with local data.
+ * 1. Deletes ALL remote settings and texts for the user
+ * 2. Pushes ALL local data to cloud
+ * @param {string} userId - User ID
+ * @param {Object} localSettings - Local settings from localStorage
+ * @param {Array} localTexts - Local texts from localStorage
+ * @returns {Promise<{success: boolean, error?: string, insertedTexts?: Array}>}
+ */
+export async function forceOverwriteRemoteWithLocal(userId, localSettings, localTexts) {
+  if (!isSupabaseConfigured || !supabase) {
+    setSyncStatus('error', 'Supabase not configured');
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  if (!isOnline()) {
+    setSyncStatus('offline');
+    return { success: false, error: 'Cannot overwrite remote while offline' };
+  }
+
+  // Verify userId matches authenticated session (security check)
+  const { data: { user: sessionUser } } = await supabase.auth.getUser();
+  if (!sessionUser || sessionUser.id !== userId) {
+    console.error('[Sync] forceOverwriteRemoteWithLocal: userId mismatch or no session');
+    setSyncStatus('error', 'Authentication required');
+    return { success: false, error: 'Authentication required' };
+  }
+
+  // Mutex: Prevent concurrent force overwrite operations
+  if (isForceOverwriting) {
+    console.log('[Sync] forceOverwriteRemoteWithLocal: Already in progress, skipping');
+    // Don't change status - another operation is handling it
+    return { success: false, error: 'Operation already in progress' };
+  }
+
+  isForceOverwriting = true;
+  console.log('[Sync] forceOverwriteRemoteWithLocal: Starting');
+
+  try {
+    setSyncStatus('syncing');
+    const errors = [];
+
+    // Step 1: Delete ALL remote data
+    console.log('[Sync] Deleting all remote settings...');
+    const { error: settingsDeleteError } = await supabase
+      .from('user_settings')
+      .delete()
+      .eq('user_id', userId);
+
+    if (settingsDeleteError) {
+      console.error('[Sync] Failed to delete remote settings:', settingsDeleteError);
+      errors.push(`Settings delete: ${settingsDeleteError.message}`);
+    }
+
+    console.log('[Sync] Deleting all remote texts...');
+    const { error: textsDeleteError } = await supabase
+      .from('custom_texts')
+      .delete()
+      .eq('user_id', userId);
+
+    if (textsDeleteError) {
+      console.error('[Sync] Failed to delete remote texts:', textsDeleteError);
+      errors.push(`Texts delete: ${textsDeleteError.message}`);
+    }
+
+    // If deletion failed, abort
+    if (errors.length > 0) {
+      const errorMsg = errors.join('; ');
+      setSyncStatus('error', errorMsg);
+      return { success: false, error: errorMsg };
+    }
+
+    console.log('[Sync] Remote data cleared, pushing local data...');
+
+    // Step 2: Push ALL local data
+    let insertedTexts = [];
+
+    // Push settings
+    if (localSettings && Object.keys(localSettings).length > 0) {
+      const { error: settingsError } = await supabase
+        .from('user_settings')
+        .insert({
+          user_id: userId,
+          settings: localSettings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (settingsError) {
+        console.error('[Sync] Failed to push settings:', settingsError);
+        errors.push(`Settings push: ${settingsError.message}`);
+      }
+    }
+
+    // Push texts (all as new inserts since we cleared remote)
+    if (localTexts && localTexts.length > 0) {
+      const textsToInsert = localTexts
+        .filter(t => t && typeof t.text === 'string' && t.text.trim())
+        .map(t => {
+          // Validate mode/reference_text consistency
+          let mode = t.mode || 'normal';
+          let referenceText = t.referenceText || null;
+
+          if (mode === 'reference' && (!referenceText || !referenceText.trim())) {
+            mode = 'normal';
+            referenceText = null;
+          }
+          if (mode === 'normal' && referenceText && referenceText.trim()) {
+            referenceText = null;
+          }
+
+          // Safely parse created_at date with fallback
+          let createdAt;
+          try {
+            if (t.createdAt && typeof t.createdAt === 'string') {
+              createdAt = t.createdAt;
+            } else if (t.timestamp && !isNaN(t.timestamp)) {
+              createdAt = new Date(t.timestamp).toISOString();
+            } else {
+              createdAt = new Date().toISOString();
+            }
+          } catch {
+            createdAt = new Date().toISOString();
+          }
+
+          return {
+            user_id: userId,
+            text: t.text.trim(),
+            mode: mode,
+            reference_text: referenceText,
+            word_count: t.text.trim().split(/\s+/).length,
+            created_at: createdAt,
+            updated_at: new Date().toISOString(),
+          };
+        });
+
+      if (textsToInsert.length > 0) {
+        const { data, error: textsError } = await supabase
+          .from('custom_texts')
+          .insert(textsToInsert)
+          .select('id, text, mode, reference_text, word_count, created_at, updated_at');
+
+        if (textsError) {
+          console.error('[Sync] Failed to push texts:', textsError);
+          errors.push(`Texts push: ${textsError.message}`);
+        } else if (data) {
+          console.log(`[Sync] Pushed ${data.length} texts to cloud`);
+          insertedTexts = data;
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMsg = errors.join('; ');
+      setSyncStatus('error', errorMsg);
+      return { success: false, error: errorMsg, insertedTexts };
+    }
+
+    // Clear pending changes since we've fully synced
+    clearPendingChanges();
+
+    console.log('[Sync] forceOverwriteRemoteWithLocal: Complete');
+    setSyncStatus('synced');
+    return { success: true, insertedTexts };
+  } catch (err) {
+    console.error('[Sync] forceOverwriteRemoteWithLocal exception:', err);
+    setSyncStatus('error', err.message);
+    return { success: false, error: err.message };
+  } finally {
+    isForceOverwriting = false;
+  }
 }
