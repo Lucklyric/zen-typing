@@ -85,6 +85,120 @@ let isProcessingPending = false;
 // Mutex for forceOverwriteRemoteWithLocal to prevent concurrent execution
 let isForceOverwriting = false;
 
+// Set to track all active sync abort controllers for cancellation
+const activeSyncControllers = new Set();
+
+// Timeout for sync operations (10 seconds)
+const SYNC_TIMEOUT_MS = 10000;
+
+/**
+ * Create and register a new abort controller for sync operations
+ * @returns {AbortController}
+ */
+function createSyncAbortController() {
+  const controller = new AbortController();
+  activeSyncControllers.add(controller);
+  return controller;
+}
+
+/**
+ * Cleanup and unregister an abort controller
+ * @param {AbortController} controller
+ */
+function cleanupSyncAbortController(controller) {
+  if (controller) {
+    activeSyncControllers.delete(controller);
+  }
+}
+
+/**
+ * Wrap a promise with timeout and abort signal
+ * @param {Promise} promise - Promise to wrap
+ * @param {AbortSignal} signal - Abort signal for cancellation
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @returns {Promise}
+ * @throws {Error} With error.name = 'AbortError' | 'TimeoutError'
+ */
+function withTimeout(promise, signal, timeoutMs = SYNC_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    let timeoutId;
+    let settled = false;
+    let onAbort = null;
+
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      // Remove abort listener to prevent memory leak
+      if (signal && onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      settled = true;
+    };
+
+    // Set up timeout
+    timeoutId = setTimeout(() => {
+      if (!settled) {
+        cleanup();
+        const err = new Error('Operation timed out');
+        err.name = 'TimeoutError';
+        reject(err);
+      }
+    }, timeoutMs);
+
+    // Set up abort listener
+    if (signal) {
+      onAbort = () => {
+        if (!settled) {
+          cleanup();
+          const err = new Error('Operation cancelled by user');
+          err.name = 'AbortError';
+          reject(err);
+        }
+      };
+      signal.addEventListener('abort', onAbort);
+    }
+
+    // Run the promise
+    promise
+      .then((result) => {
+        if (!settled) {
+          cleanup();
+          resolve(result);
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          cleanup();
+          reject(err);
+        }
+      });
+  });
+}
+
+/**
+ * Handle sync errors consistently, setting status and returning result object
+ * @param {Error} err - The caught error
+ * @param {string} context - Log context (e.g., 'syncSettingsToCloud')
+ * @param {string} [dataKey] - Key for data field in return object (e.g., 'settings', 'texts')
+ * @returns {{success: false, error: string, cancelled?: boolean, timeout?: boolean}}
+ */
+function handleSyncError(err, context, dataKey = null) {
+  console.error(`[Sync] ${context} exception:`, err);
+
+  const base = dataKey ? { [dataKey]: null } : { success: false };
+
+  if (err.name === 'AbortError') {
+    setSyncStatus('error', 'Sync cancelled');
+    return { ...base, error: 'Sync cancelled', cancelled: true };
+  }
+  if (err.name === 'TimeoutError') {
+    setSyncStatus('error', 'Sync timed out');
+    return { ...base, error: 'Sync timed out', timeout: true };
+  }
+
+  setSyncStatus('error', err.message);
+  return { ...base, error: err.message };
+}
+
 /**
  * Get current sync state
  * @returns {SyncState}
@@ -192,6 +306,11 @@ export async function processPendingChanges(userId) {
   }
 
   isProcessingPending = true;
+
+  // Create abort controller for this batch operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     // Snapshot pending changes at start (new changes during processing stay in queue)
     const pending = [...syncState.pendingChanges];
@@ -208,35 +327,49 @@ export async function processPendingChanges(userId) {
     const orderedPending = [...clearAllChanges, ...deleteChanges, ...otherChanges];
 
     for (const change of orderedPending) {
+      // Check if cancelled before each operation
+      if (signal.aborted) {
+        setSyncStatus('error', 'Sync cancelled');
+        return { success: false, error: 'Sync cancelled', cancelled: true, insertedTexts: allInsertedTexts };
+      }
+
       try {
         if (change.type === 'settings') {
           const result = await syncSettingsToCloud(change.data, userId);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
+            // Stop on cancel/timeout
+            if (result.cancelled || result.timeout) break;
           }
         } else if (change.type === 'texts') {
           const result = await syncCustomTextsToCloud(change.data, userId);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
+            // Stop on cancel/timeout
+            if (result.cancelled || result.timeout) break;
           } else if (result.insertedTexts?.length > 0) {
             // Collect inserted texts so caller can update local IDs
             allInsertedTexts.push(...result.insertedTexts);
           }
         } else if (change.type === 'delete') {
-          // Handle single text deletion
-          const result = await deleteCustomTextFromCloudDirect(change.data.id, userId);
+          // Handle single text deletion (pass signal for timeout)
+          const result = await deleteCustomTextFromCloudDirect(change.data.id, userId, signal);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
+            // Stop on cancel/timeout
+            if (result.cancelled || result.timeout) break;
           }
         } else if (change.type === 'clearAll') {
-          // Handle clear all texts
-          const result = await clearAllCustomTextsFromCloudDirect(userId);
+          // Handle clear all texts (pass signal for timeout)
+          const result = await clearAllCustomTextsFromCloudDirect(userId, signal);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
+            // Stop on cancel/timeout
+            if (result.cancelled || result.timeout) break;
           }
         }
       } catch (err) {
@@ -259,6 +392,7 @@ export async function processPendingChanges(userId) {
     return { success: true, insertedTexts: allInsertedTexts };
   } finally {
     isProcessingPending = false;
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -327,6 +461,8 @@ export function resetSyncState() {
   activeSyncCount = 0; // Reset sync counter to prevent stuck 'syncing' status
   isProcessingPending = false; // Reset mutex to allow future processing
   isForceOverwriting = false; // Reset force overwrite mutex
+  // Cancel and clear all active sync controllers
+  cancelActiveSync();
   persistPendingChanges([]); // Clear persisted pending changes
   subscribers.forEach((callback) => callback(getSyncState()));
 }
@@ -336,6 +472,24 @@ export function resetSyncState() {
  */
 export function clearPendingChanges() {
   updateSyncState({ pendingChanges: [] });
+}
+
+/**
+ * Cancel all active sync operations
+ * Called when user wants to stop hanging syncs
+ */
+export function cancelActiveSync() {
+  if (activeSyncControllers.size > 0) {
+    console.log(`[Sync] Cancelling ${activeSyncControllers.size} active sync operation(s)`);
+    activeSyncControllers.forEach(controller => {
+      try {
+        controller.abort();
+      } catch {
+        // Ignore errors from already aborted controllers
+      }
+    });
+    activeSyncControllers.clear();
+  }
 }
 
 // ============================================
@@ -364,18 +518,25 @@ export async function syncSettingsToCloud(settings, userId) {
 
   console.log('[Sync] syncSettingsToCloud: Syncing settings');
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
 
-    const { error } = await supabase
-      .from('user_settings')
-      .upsert({
-        user_id: userId,
-        settings,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      });
+    const { error } = await withTimeout(
+      supabase
+        .from('user_settings')
+        .upsert({
+          user_id: userId,
+          settings,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        }),
+      signal
+    );
 
     if (error) {
       console.error('[Sync] syncSettingsToCloud error:', error);
@@ -387,9 +548,9 @@ export async function syncSettingsToCloud(settings, userId) {
     setSyncStatus('synced');
     return { success: true };
   } catch (err) {
-    console.error('[Sync] syncSettingsToCloud exception:', err);
-    setSyncStatus('error', err.message);
-    return { success: false, error: err.message };
+    return handleSyncError(err, 'syncSettingsToCloud');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -406,14 +567,21 @@ export async function loadSettingsFromCloud(userId) {
 
   console.log('[Sync] loadSettingsFromCloud: Loading settings');
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
 
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('settings')
-      .eq('user_id', userId)
-      .single();
+    const { data, error } = await withTimeout(
+      supabase
+        .from('user_settings')
+        .select('settings')
+        .eq('user_id', userId)
+        .single(),
+      signal
+    );
 
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows returned (not an error for new users)
@@ -426,9 +594,9 @@ export async function loadSettingsFromCloud(userId) {
     setSyncStatus('synced');
     return { settings: data?.settings || null };
   } catch (err) {
-    console.error('[Sync] loadSettingsFromCloud exception:', err);
-    setSyncStatus('error', err.message);
-    return { settings: null, error: err.message };
+    return handleSyncError(err, 'loadSettingsFromCloud', 'settings');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -457,6 +625,10 @@ export async function syncCustomTextsToCloud(texts, userId) {
   }
 
   console.log(`[Sync] syncCustomTextsToCloud: Processing ${texts.length} texts`);
+
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
 
   try {
     setSyncStatus('syncing');
@@ -539,12 +711,15 @@ export async function syncCustomTextsToCloud(texts, userId) {
     // Upsert texts that have IDs
     if (textsWithId.length > 0) {
       console.log('[Sync] Upserting texts with existing UUIDs...');
-      const { error } = await supabase
-        .from('custom_texts')
-        .upsert(textsWithId, {
-          onConflict: 'id',
-          ignoreDuplicates: false,
-        });
+      const { error } = await withTimeout(
+        supabase
+          .from('custom_texts')
+          .upsert(textsWithId, {
+            onConflict: 'id',
+            ignoreDuplicates: false,
+          }),
+        signal
+      );
       if (error) {
         console.error('[Sync] Upsert error:', error);
         errors.push(error.message);
@@ -557,10 +732,13 @@ export async function syncCustomTextsToCloud(texts, userId) {
     let insertedTexts = [];
     if (newTexts.length > 0) {
       console.log('[Sync] Inserting new texts...');
-      const { data, error } = await supabase
-        .from('custom_texts')
-        .insert(newTexts)
-        .select('id, text, mode, reference_text, word_count, created_at, updated_at');
+      const { data, error } = await withTimeout(
+        supabase
+          .from('custom_texts')
+          .insert(newTexts)
+          .select('id, text, mode, reference_text, word_count, created_at, updated_at'),
+        signal
+      );
       if (error) {
         console.error('[Sync] Insert error:', error);
         errors.push(error.message);
@@ -580,8 +758,9 @@ export async function syncCustomTextsToCloud(texts, userId) {
     // Return inserted texts so caller can update local storage with DB IDs
     return { success: true, insertedTexts };
   } catch (err) {
-    setSyncStatus('error', err.message);
-    return { success: false, error: err.message };
+    return handleSyncError(err, 'syncCustomTextsToCloud');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -598,14 +777,21 @@ export async function loadCustomTextsFromCloud(userId) {
 
   console.log('[Sync] loadCustomTextsFromCloud: Loading texts');
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
 
-    const { data, error } = await supabase
-      .from('custom_texts')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await withTimeout(
+      supabase
+        .from('custom_texts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      signal
+    );
 
     if (error) {
       console.error('[Sync] loadCustomTextsFromCloud error:', error);
@@ -629,9 +815,9 @@ export async function loadCustomTextsFromCloud(userId) {
     setSyncStatus('synced');
     return { texts };
   } catch (err) {
-    console.error('[Sync] loadCustomTextsFromCloud exception:', err);
-    setSyncStatus('error', err.message);
-    return { texts: null, error: err.message };
+    return handleSyncError(err, 'loadCustomTextsFromCloud', 'texts');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -641,7 +827,7 @@ export async function loadCustomTextsFromCloud(userId) {
  * @param {string} userId - User ID
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function deleteCustomTextFromCloudDirect(textId, userId) {
+async function deleteCustomTextFromCloudDirect(textId, userId, signal = null) {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
@@ -651,11 +837,15 @@ async function deleteCustomTextFromCloudDirect(textId, userId) {
   }
 
   try {
-    const { error } = await supabase
+    const promise = supabase
       .from('custom_texts')
       .delete()
       .eq('id', textId)
       .eq('user_id', userId);
+
+    const { error } = signal
+      ? await withTimeout(promise, signal)
+      : await promise;
 
     if (error) {
       console.error('[Sync] deleteCustomTextFromCloudDirect error:', error);
@@ -664,6 +854,12 @@ async function deleteCustomTextFromCloudDirect(textId, userId) {
     return { success: true };
   } catch (err) {
     console.error('[Sync] deleteCustomTextFromCloudDirect exception:', err);
+    if (err.name === 'AbortError') {
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { success: false, error: 'Sync timed out', timeout: true };
+    }
     return { success: false, error: err.message };
   }
 }
@@ -673,16 +869,20 @@ async function deleteCustomTextFromCloudDirect(textId, userId) {
  * @param {string} userId - User ID
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function clearAllCustomTextsFromCloudDirect(userId) {
+async function clearAllCustomTextsFromCloudDirect(userId, signal = null) {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
 
   try {
-    const { error } = await supabase
+    const promise = supabase
       .from('custom_texts')
       .delete()
       .eq('user_id', userId);
+
+    const { error } = signal
+      ? await withTimeout(promise, signal)
+      : await promise;
 
     if (error) {
       console.error('[Sync] clearAllCustomTextsFromCloudDirect error:', error);
@@ -691,6 +891,12 @@ async function clearAllCustomTextsFromCloudDirect(userId) {
     return { success: true };
   } catch (err) {
     console.error('[Sync] clearAllCustomTextsFromCloudDirect exception:', err);
+    if (err.name === 'AbortError') {
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { success: false, error: 'Sync timed out', timeout: true };
+    }
     return { success: false, error: err.message };
   }
 }
@@ -710,7 +916,6 @@ export async function deleteCustomTextFromCloud(textId, userId) {
   // Handle local-only texts (non-UUID): remove from pending inserts if queued offline
   if (!isUUID(textId)) {
     // Check if there's a pending insert containing this text
-    const pendingTexts = syncState.pendingChanges.filter(c => c.type === 'texts');
     let foundAndRemoved = false;
 
     const updatedPending = syncState.pendingChanges.map(change => {
@@ -745,14 +950,21 @@ export async function deleteCustomTextFromCloud(textId, userId) {
 
   console.log(`[Sync] deleteCustomTextFromCloud: Deleting text ${textId}`);
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
 
-    const { error } = await supabase
-      .from('custom_texts')
-      .delete()
-      .eq('id', textId)
-      .eq('user_id', userId);
+    const { error } = await withTimeout(
+      supabase
+        .from('custom_texts')
+        .delete()
+        .eq('id', textId)
+        .eq('user_id', userId),
+      signal
+    );
 
     if (error) {
       console.error('[Sync] deleteCustomTextFromCloud error:', error);
@@ -764,9 +976,9 @@ export async function deleteCustomTextFromCloud(textId, userId) {
     setSyncStatus('synced');
     return { success: true };
   } catch (err) {
-    console.error('[Sync] deleteCustomTextFromCloud exception:', err);
-    setSyncStatus('error', err.message);
-    return { success: false, error: err.message };
+    return handleSyncError(err, 'deleteCustomTextFromCloud');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -791,13 +1003,20 @@ export async function clearAllCustomTextsFromCloud(userId) {
 
   console.log('[Sync] clearAllCustomTextsFromCloud: Clearing all texts');
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
 
-    const { error } = await supabase
-      .from('custom_texts')
-      .delete()
-      .eq('user_id', userId);
+    const { error } = await withTimeout(
+      supabase
+        .from('custom_texts')
+        .delete()
+        .eq('user_id', userId),
+      signal
+    );
 
     if (error) {
       console.error('[Sync] clearAllCustomTextsFromCloud error:', error);
@@ -809,9 +1028,9 @@ export async function clearAllCustomTextsFromCloud(userId) {
     setSyncStatus('synced');
     return { success: true };
   } catch (err) {
-    console.error('[Sync] clearAllCustomTextsFromCloud exception:', err);
-    setSyncStatus('error', err.message);
-    return { success: false, error: err.message };
+    return handleSyncError(err, 'clearAllCustomTextsFromCloud');
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 
@@ -952,38 +1171,60 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
   isForceOverwriting = true;
   console.log('[Sync] forceOverwriteRemoteWithLocal: Starting');
 
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
     setSyncStatus('syncing');
     const errors = [];
 
     // Step 1: Delete ALL remote data
     console.log('[Sync] Deleting all remote settings...');
-    const { error: settingsDeleteError } = await supabase
-      .from('user_settings')
-      .delete()
-      .eq('user_id', userId);
+    const { error: settingsDeleteError } = await withTimeout(
+      supabase
+        .from('user_settings')
+        .delete()
+        .eq('user_id', userId),
+      signal
+    );
 
     if (settingsDeleteError) {
       console.error('[Sync] Failed to delete remote settings:', settingsDeleteError);
       errors.push(`Settings delete: ${settingsDeleteError.message}`);
     }
 
+    // Check if cancelled before next operation
+    if (signal.aborted) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+
     console.log('[Sync] Deleting all remote texts...');
-    const { error: textsDeleteError } = await supabase
-      .from('custom_texts')
-      .delete()
-      .eq('user_id', userId);
+    const { error: textsDeleteError } = await withTimeout(
+      supabase
+        .from('custom_texts')
+        .delete()
+        .eq('user_id', userId),
+      signal
+    );
 
     if (textsDeleteError) {
       console.error('[Sync] Failed to delete remote texts:', textsDeleteError);
       errors.push(`Texts delete: ${textsDeleteError.message}`);
     }
 
-    // If deletion failed, abort
+    // If deletion failed or cancelled, abort
     if (errors.length > 0) {
       const errorMsg = errors.join('; ');
       setSyncStatus('error', errorMsg);
       return { success: false, error: errorMsg };
+    }
+
+    // Check if cancelled before push
+    if (signal.aborted) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
     console.log('[Sync] Remote data cleared, pushing local data...');
@@ -993,18 +1234,27 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
 
     // Push settings
     if (localSettings && Object.keys(localSettings).length > 0) {
-      const { error: settingsError } = await supabase
-        .from('user_settings')
-        .insert({
-          user_id: userId,
-          settings: localSettings,
-          updated_at: new Date().toISOString(),
-        });
+      const { error: settingsError } = await withTimeout(
+        supabase
+          .from('user_settings')
+          .insert({
+            user_id: userId,
+            settings: localSettings,
+            updated_at: new Date().toISOString(),
+          }),
+        signal
+      );
 
       if (settingsError) {
         console.error('[Sync] Failed to push settings:', settingsError);
         errors.push(`Settings push: ${settingsError.message}`);
       }
+    }
+
+    // Check if cancelled before texts push
+    if (signal.aborted) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
     // Push texts (all as new inserts since we cleared remote)
@@ -1050,10 +1300,13 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
         });
 
       if (textsToInsert.length > 0) {
-        const { data, error: textsError } = await supabase
-          .from('custom_texts')
-          .insert(textsToInsert)
-          .select('id, text, mode, reference_text, word_count, created_at, updated_at');
+        const { data, error: textsError } = await withTimeout(
+          supabase
+            .from('custom_texts')
+            .insert(textsToInsert)
+            .select('id, text, mode, reference_text, word_count, created_at, updated_at'),
+          signal
+        );
 
         if (textsError) {
           console.error('[Sync] Failed to push texts:', textsError);
@@ -1078,10 +1331,9 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     setSyncStatus('synced');
     return { success: true, insertedTexts };
   } catch (err) {
-    console.error('[Sync] forceOverwriteRemoteWithLocal exception:', err);
-    setSyncStatus('error', err.message);
-    return { success: false, error: err.message };
+    return handleSyncError(err, 'forceOverwriteRemoteWithLocal');
   } finally {
     isForceOverwriting = false;
+    cleanupSyncAbortController(abortController);
   }
 }

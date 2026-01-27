@@ -37,6 +37,7 @@ import {
   clearAllCustomTextsFromCloud,
   clearPendingChanges,
   forceOverwriteRemoteWithLocal,
+  cancelActiveSync,
 } from './utils/syncService';
 import { customTextStorage } from './utils/customTextStorage';
 
@@ -562,10 +563,40 @@ function App() {
   const handleSyncRetry = useCallback(async () => {
     if (!user) return;
 
-    // Re-attempt pending changes
-    const result = await processPendingChanges(user.id);
-    if (!result.success) {
-      console.error('Sync retry failed:', result.error);
+    console.log('[Sync] Retry triggered by user');
+    setSyncError(null); // Clear error state first
+
+    // First try to process any pending changes
+    const pendingResult = await processPendingChanges(user.id);
+
+    // If pending succeeded or was skipped (no pending), do a full sync
+    if (pendingResult.success || pendingResult.skipped) {
+      // Get current local data
+      const localTexts = customTextStorage.getAll();
+      const localSettings = settingsStorage.get();
+      const userId = user.id;
+
+      // Sync local settings to cloud
+      const settingsResult = await syncSettingsToCloud(localSettings, userId);
+      if (!settingsResult.success) {
+        console.error('[Sync] Retry settings sync failed:', settingsResult.error);
+        return;
+      }
+
+      // Sync local texts to cloud
+      if (localTexts.length > 0) {
+        const textsResult = await syncCustomTextsToCloud(localTexts, userId);
+        if (textsResult.success && textsResult.insertedTexts?.length > 0) {
+          customTextStorage.updateWithDbIds(textsResult.insertedTexts);
+        } else if (!textsResult.success) {
+          console.error('[Sync] Retry texts sync failed:', textsResult.error);
+          return;
+        }
+      }
+
+      console.log('[Sync] Retry sync completed successfully');
+    } else {
+      console.error('[Sync] Retry pending changes failed:', pendingResult.error);
     }
   }, [user]);
 
@@ -681,6 +712,20 @@ function App() {
       setSyncError(result.error || 'Force overwrite failed'); // Surface error to UI
     }
   }, [user]);
+
+  // Cancel active sync operation (for timeout/hanging syncs)
+  const handleCancelSync = useCallback(() => {
+    console.log('[Sync] User requested sync cancellation');
+    cancelActiveSync();
+  }, []);
+
+  // Discard pending changes and clear error state
+  const handleDiscardPending = useCallback(() => {
+    console.log('[Sync] User discarding pending changes');
+    clearPendingChanges();
+    updateSyncServiceStatus('synced');
+    setSyncError(null);
+  }, []);
 
   // Determine if we should show reference workspace based on whether entry has reference text
   const shouldShowReference = selectedEntry.referenceText && selectedEntry.referenceText.trim().length > 0;
@@ -882,6 +927,8 @@ function App() {
                       onRetry={handleSyncRetry}
                       onForceSync={handleForceSync}
                       onForceOverwrite={handleForceOverwrite}
+                      onCancelSync={handleCancelSync}
+                      onDiscardPending={handleDiscardPending}
                     />
                   )}
                   <AuthButton

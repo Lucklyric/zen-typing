@@ -43,8 +43,12 @@ export async function signInWithMagicLink(email) {
   }
 }
 
+// Timeout for auth operations (5 seconds - faster than sync for better UX)
+const AUTH_TIMEOUT_MS = 5000;
+
 /**
- * Sign out current user
+ * Sign out current user with timeout
+ * If signOut times out, clears local session anyway for better UX
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function signOut() {
@@ -53,7 +57,17 @@ export async function signOut() {
   }
 
   try {
-    const { error } = await supabase.auth.signOut();
+    // Race between signOut and timeout
+    const signOutPromise = supabase.auth.signOut();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        const err = new Error('Sign out timed out');
+        err.name = 'TimeoutError';
+        reject(err);
+      }, AUTH_TIMEOUT_MS);
+    });
+
+    const { error } = await Promise.race([signOutPromise, timeoutPromise]);
 
     if (error) {
       return { success: false, error: error.message };
@@ -61,6 +75,24 @@ export async function signOut() {
 
     return { success: true };
   } catch (err) {
+    // On timeout, clear local storage to sign out locally anyway
+    if (err.name === 'TimeoutError') {
+      console.warn('[Auth] signOut timed out, clearing local session');
+      // Clear Supabase local storage keys to force local signout
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return { success: true, timedOut: true };
+    }
     return { success: false, error: err.message || 'Failed to sign out' };
   }
 }
