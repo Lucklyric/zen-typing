@@ -37,6 +37,7 @@ import {
   clearAllCustomTextsFromCloud,
   clearPendingChanges,
   forceOverwriteRemoteWithLocal,
+  forceUseRemoteData,
   cancelActiveSync,
 } from './utils/syncService';
 import { customTextStorage } from './utils/customTextStorage';
@@ -105,6 +106,25 @@ function App() {
   const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'syncing' | 'offline' | 'error'
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0); // Triggers CustomTextHistory refresh
   const [syncError, setSyncError] = useState(null);
+
+  // Helper to apply cloud settings to local storage and React state
+  const applyCloudSettings = useCallback((settings) => {
+    if (!settings) return;
+    Object.entries(settings).forEach(([key, value]) => {
+      settingsStorage.set(key, value);
+    });
+    // Update React state for all settings
+    if (settings.showIPA !== undefined) setShowIPA(settings.showIPA);
+    if (settings.soundEnabled !== undefined) setSoundEnabled(settings.soundEnabled);
+    if (settings.dictationMode !== undefined) setDictationMode(settings.dictationMode);
+    if (settings.themePreference !== undefined) setThemePreference(settings.themePreference);
+    if (settings.showHistory !== undefined) setShowHistory(settings.showHistory);
+    if (settings.themeExplicitlySet !== undefined) setThemeExplicitlySet(settings.themeExplicitlySet);
+    if (settings.activeSection !== undefined) setActiveSection(settings.activeSection);
+    if (settings.splitRatio !== undefined) setSplitRatio(settings.splitRatio);
+    if (settings.centerAreaHeight !== undefined) setCenterAreaHeight(settings.centerAreaHeight);
+    if (settings.focusMode !== undefined) setFocusMode(settings.focusMode);
+  }, []);
 
   // Window resize listener
   useEffect(() => {
@@ -175,23 +195,7 @@ function App() {
           console.log('[Sync] Loaded from cloud:', { settings: settingsResult, texts: textsResult });
 
           // Apply cloud settings to local
-          if (settingsResult.settings) {
-            Object.entries(settingsResult.settings).forEach(([key, value]) => {
-              settingsStorage.set(key, value);
-            });
-            // Update React state for ALL settings that have state
-            const s = settingsResult.settings;
-            if (s.showIPA !== undefined) setShowIPA(s.showIPA);
-            if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
-            if (s.dictationMode !== undefined) setDictationMode(s.dictationMode);
-            if (s.themePreference !== undefined) setThemePreference(s.themePreference);
-            if (s.showHistory !== undefined) setShowHistory(s.showHistory);
-            if (s.themeExplicitlySet !== undefined) setThemeExplicitlySet(s.themeExplicitlySet);
-            if (s.activeSection !== undefined) setActiveSection(s.activeSection);
-            if (s.splitRatio !== undefined) setSplitRatio(s.splitRatio);
-            if (s.centerAreaHeight !== undefined) setCenterAreaHeight(s.centerAreaHeight);
-            if (s.focusMode !== undefined) setFocusMode(s.focusMode);
-          }
+          applyCloudSettings(settingsResult.settings);
 
           // Apply cloud texts to local (replace local with cloud)
           if (textsResult.texts && textsResult.texts.length > 0) {
@@ -239,7 +243,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [applyCloudSettings]);
 
   // Sync state listener (Cloud Sync)
   useEffect(() => {
@@ -580,6 +584,7 @@ function App() {
       const settingsResult = await syncSettingsToCloud(localSettings, userId);
       if (!settingsResult.success) {
         console.error('[Sync] Retry settings sync failed:', settingsResult.error);
+        setSyncError(settingsResult.error || 'Settings sync failed');
         return;
       }
 
@@ -590,6 +595,7 @@ function App() {
           customTextStorage.updateWithDbIds(textsResult.insertedTexts);
         } else if (!textsResult.success) {
           console.error('[Sync] Retry texts sync failed:', textsResult.error);
+          setSyncError(textsResult.error || 'Texts sync failed');
           return;
         }
       }
@@ -597,6 +603,7 @@ function App() {
       console.log('[Sync] Retry sync completed successfully');
     } else {
       console.error('[Sync] Retry pending changes failed:', pendingResult.error);
+      setSyncError(pendingResult.error || 'Pending changes sync failed');
     }
   }, [user]);
 
@@ -604,6 +611,7 @@ function App() {
     if (!user) return;
 
     console.log('[Sync] Force sync triggered by user');
+    setSyncError(null); // Clear any previous error
     const userId = user.id;
 
     // Get current local data
@@ -612,6 +620,7 @@ function App() {
     console.log(`[Sync] Force sync: ${localTexts.length} local texts, settings:`, Object.keys(localSettings).length);
 
     let pushSucceeded = true;
+    let lastError = null;
 
     // Sync local settings to cloud
     const settingsSyncResult = await syncSettingsToCloud(localSettings, userId);
@@ -619,6 +628,7 @@ function App() {
     if (!settingsSyncResult.success) {
       console.error('[Sync] Force sync settings push failed, skipping pull');
       pushSucceeded = false;
+      lastError = settingsSyncResult.error;
     }
 
     // Sync local texts to cloud
@@ -631,36 +641,21 @@ function App() {
       } else if (!syncResult.success) {
         console.error('[Sync] Force sync texts push failed, skipping pull');
         pushSucceeded = false;
+        lastError = syncResult.error;
       }
     }
 
     // Only pull from cloud if push succeeded to avoid data loss
     if (!pushSucceeded) {
       console.warn('[Sync] Force sync: push failed, not pulling from cloud to avoid data loss');
+      setSyncError(lastError || 'Sync push failed');
       return;
     }
 
     // Load settings from cloud and apply
     const cloudSettings = await loadSettingsFromCloud(userId);
     console.log('[Sync] Force sync cloud settings:', cloudSettings);
-
-    if (cloudSettings.settings) {
-      Object.entries(cloudSettings.settings).forEach(([key, value]) => {
-        settingsStorage.set(key, value);
-      });
-      // Update React state for ALL settings that have state
-      const s = cloudSettings.settings;
-      if (s.showIPA !== undefined) setShowIPA(s.showIPA);
-      if (s.soundEnabled !== undefined) setSoundEnabled(s.soundEnabled);
-      if (s.dictationMode !== undefined) setDictationMode(s.dictationMode);
-      if (s.themePreference !== undefined) setThemePreference(s.themePreference);
-      if (s.showHistory !== undefined) setShowHistory(s.showHistory);
-      if (s.themeExplicitlySet !== undefined) setThemeExplicitlySet(s.themeExplicitlySet);
-      if (s.activeSection !== undefined) setActiveSection(s.activeSection);
-      if (s.splitRatio !== undefined) setSplitRatio(s.splitRatio);
-      if (s.centerAreaHeight !== undefined) setCenterAreaHeight(s.centerAreaHeight);
-      if (s.focusMode !== undefined) setFocusMode(s.focusMode);
-    }
+    applyCloudSettings(cloudSettings.settings);
 
     // Load texts from cloud to ensure we have latest
     const cloudResult = await loadCustomTextsFromCloud(userId);
@@ -675,11 +670,11 @@ function App() {
     clearPendingChanges();
 
     console.log('[Sync] Force sync complete');
-  }, [user]);
+  }, [user, applyCloudSettings]);
 
   // Force overwrite remote with local data (destructive)
   const handleForceOverwrite = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     console.log('[Sync] Force overwrite remote triggered by user');
     const userId = user.id;
@@ -694,24 +689,64 @@ function App() {
     if (result.success) {
       console.log('[Sync] Force overwrite successful');
       setSyncError(null); // Clear any previous error
-      // Update local text IDs with new DB IDs
+      // Update local text IDs with new DB IDs (with error handling)
       if (result.insertedTexts?.length > 0) {
-        customTextStorage.replaceAll(result.insertedTexts.map(t => ({
-          id: t.id,
-          text: t.text,
-          mode: t.mode,
-          referenceText: t.reference_text,
-          wordCount: t.word_count,
-          createdAt: t.created_at,
-          updatedAt: t.updated_at,
-        })));
-        setHistoryRefreshKey((k) => k + 1);
+        try {
+          customTextStorage.replaceAll(result.insertedTexts.map(t => ({
+            id: t.id,
+            text: t.text,
+            mode: t.mode,
+            referenceText: t.reference_text,
+            wordCount: t.word_count,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+          })));
+          setHistoryRefreshKey((k) => k + 1);
+        } catch (storageErr) {
+          console.error('[Sync] Force overwrite storage error:', storageErr);
+          setSyncError('Failed to save data locally');
+        }
       }
     } else {
       console.error('[Sync] Force overwrite failed:', result.error);
       setSyncError(result.error || 'Force overwrite failed'); // Surface error to UI
     }
   }, [user]);
+
+  // Force use remote data (overwrite local with cloud) - destructive to local
+  const handleForceUseRemote = useCallback(async () => {
+    if (!user?.id) return;
+
+    console.log('[Sync] Force use remote triggered by user');
+    const userId = user.id;
+
+    const result = await forceUseRemoteData(userId);
+
+    if (result.success) {
+      console.log('[Sync] Force use remote successful');
+      setSyncError(null); // Clear any previous error
+
+      // Apply settings from cloud
+      applyCloudSettings(result.settings);
+
+      // Replace local texts with cloud texts (with error handling)
+      try {
+        if (result.texts && result.texts.length > 0) {
+          customTextStorage.replaceAll(result.texts);
+        } else {
+          // Cloud has no texts, clear local
+          customTextStorage.clearAll();
+        }
+        setHistoryRefreshKey((k) => k + 1);
+      } catch (storageErr) {
+        console.error('[Sync] Force use remote storage error:', storageErr);
+        setSyncError('Failed to save data locally');
+      }
+    } else {
+      console.error('[Sync] Force use remote failed:', result.error);
+      setSyncError(result.error || 'Force use remote failed');
+    }
+  }, [user, applyCloudSettings]);
 
   // Cancel active sync operation (for timeout/hanging syncs)
   const handleCancelSync = useCallback(() => {
@@ -927,6 +962,7 @@ function App() {
                       onRetry={handleSyncRetry}
                       onForceSync={handleForceSync}
                       onForceOverwrite={handleForceOverwrite}
+                      onForceUseRemote={handleForceUseRemote}
                       onCancelSync={handleCancelSync}
                       onDiscardPending={handleDiscardPending}
                     />

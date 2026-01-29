@@ -13,11 +13,13 @@ export default function SyncStatus({
   onRetry,
   onForceSync,
   onForceOverwrite,
+  onForceUseRemote,
   onCancelSync,
   onDiscardPending
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // 'overwrite' | 'useRemote'
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const menuRef = useRef(null);
   const confirmRef = useRef(null);
@@ -37,6 +39,7 @@ export default function SyncStatus({
         setShowMenu(false);
         setShowConfirm(false);
         setShowCancelDialog(false);
+        setConfirmAction(null); // Reset confirm action to prevent stale state
       }
     };
 
@@ -46,22 +49,27 @@ export default function SyncStatus({
 
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const handleForceOverwrite = async () => {
+  const handleConfirmAction = async () => {
     // Prevent double-clicks during execution
     if (isExecuting) return;
 
     setIsExecuting(true);
     setShowMenu(false);
-    setShowConfirm(false);
+    // Keep confirmation dialog open during execution to show "Working..." state
 
-    if (onForceOverwrite) {
+    const action = confirmAction === 'useRemote' ? onForceUseRemote : onForceOverwrite;
+    if (action) {
       try {
-        await onForceOverwrite();
+        await action();
       } finally {
         setIsExecuting(false);
+        setShowConfirm(false);
+        setConfirmAction(null);
       }
     } else {
       setIsExecuting(false);
+      setShowConfirm(false);
+      setConfirmAction(null);
     }
   };
 
@@ -139,9 +147,29 @@ export default function SyncStatus({
             >
               {theme === 'geek' ? '[SYNC]' : theme === 'cyber' ? '⟳ SYNC' : '↻ Force Sync'}
             </button>
+            {onForceUseRemote && (
+              <button
+                onClick={() => {
+                  setConfirmAction('useRemote');
+                  setShowConfirm(true);
+                }}
+                className={`w-full text-left px-3 py-3 sm:py-2 ${
+                  theme === 'geek'
+                    ? 'hover:bg-blue-900/30 active:bg-blue-900/50 text-blue-400'
+                    : theme === 'cyber'
+                    ? 'hover:bg-blue-900/30 active:bg-blue-900/50 text-blue-400'
+                    : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 active:bg-blue-100 dark:active:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                }`}
+              >
+                {theme === 'geek' ? '[USE.REMOTE]' : theme === 'cyber' ? '⬇ USE REMOTE' : '⬇ Use Remote'}
+              </button>
+            )}
             {onForceOverwrite && (
               <button
-                onClick={() => setShowConfirm(true)}
+                onClick={() => {
+                  setConfirmAction('overwrite');
+                  setShowConfirm(true);
+                }}
                 className={`w-full text-left px-3 py-3 sm:py-2 ${
                   theme === 'geek'
                     ? 'hover:bg-red-900/30 active:bg-red-900/50 text-red-400'
@@ -160,27 +188,37 @@ export default function SyncStatus({
         {showConfirm && (
           <div ref={confirmRef} className={`fixed sm:absolute inset-x-4 sm:inset-x-auto bottom-4 sm:bottom-auto sm:right-0 sm:top-full sm:mt-1 p-4 sm:p-3 sm:min-w-[240px] z-50 shadow-xl ${
             theme === 'geek'
-              ? 'bg-black border border-red-500/50 text-green-400 font-mono text-sm'
+              ? `bg-black border ${confirmAction === 'useRemote' ? 'border-blue-500/50' : 'border-red-500/50'} text-green-400 font-mono text-sm`
               : theme === 'cyber'
-              ? 'bg-black/95 border border-fuchsia-500/50 text-cyan-400 font-mono text-sm'
-              : 'bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700 rounded-lg text-sm'
+              ? `bg-black/95 border ${confirmAction === 'useRemote' ? 'border-blue-500/50' : 'border-fuchsia-500/50'} text-cyan-400 font-mono text-sm`
+              : `bg-white dark:bg-gray-800 border ${confirmAction === 'useRemote' ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700'} rounded-lg text-sm`
           }`}>
             <p className={`mb-4 sm:mb-3 text-center sm:text-left ${
               theme === 'geek'
-                ? 'text-red-400'
+                ? (confirmAction === 'useRemote' ? 'text-blue-400' : 'text-red-400')
                 : theme === 'cyber'
-                ? 'text-fuchsia-400'
-                : 'text-red-600 dark:text-red-400'
+                ? (confirmAction === 'useRemote' ? 'text-blue-400' : 'text-fuchsia-400')
+                : (confirmAction === 'useRemote' ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')
             }`}>
-              {theme === 'geek'
-                ? '⚠ THIS.WILL.DELETE.ALL.CLOUD.DATA'
-                : theme === 'cyber'
-                ? '⚠ WILL DELETE ALL CLOUD DATA'
-                : '⚠ This will delete all cloud data and replace with local'}
+              {confirmAction === 'useRemote'
+                ? (theme === 'geek'
+                    ? '⚠ THIS.WILL.DELETE.ALL.LOCAL.DATA'
+                    : theme === 'cyber'
+                    ? '⚠ WILL DELETE ALL LOCAL DATA'
+                    : '⚠ This will delete all local data and replace with cloud')
+                : (theme === 'geek'
+                    ? '⚠ THIS.WILL.DELETE.ALL.CLOUD.DATA'
+                    : theme === 'cyber'
+                    ? '⚠ WILL DELETE ALL CLOUD DATA'
+                    : '⚠ This will delete all cloud data and replace with local')
+              }
             </p>
             <div className="flex gap-3 sm:gap-2">
               <button
-                onClick={() => setShowConfirm(false)}
+                onClick={() => {
+                  setShowConfirm(false);
+                  setConfirmAction(null);
+                }}
                 className={`flex-1 px-3 py-3 sm:py-2 ${
                   theme === 'geek'
                     ? 'border border-green-500/50 hover:bg-green-900/30 active:bg-green-900/50'
@@ -192,21 +230,29 @@ export default function SyncStatus({
                 {theme === 'geek' ? '[NO]' : theme === 'cyber' ? 'CANCEL' : 'Cancel'}
               </button>
               <button
-                onClick={handleForceOverwrite}
+                onClick={handleConfirmAction}
                 disabled={isExecuting}
                 className={`flex-1 px-3 py-3 sm:py-2 font-medium transition-opacity ${
                   isExecuting ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
-                  theme === 'geek'
-                    ? 'border border-red-500/50 bg-red-900/30 hover:bg-red-900/50 active:bg-red-900/70 text-red-400'
-                    : theme === 'cyber'
-                    ? 'border border-fuchsia-500/50 bg-fuchsia-900/30 hover:bg-fuchsia-900/50 active:bg-fuchsia-900/70 text-fuchsia-400'
-                    : 'border border-red-300 dark:border-red-600 rounded bg-red-500 hover:bg-red-600 active:bg-red-700 text-white'
+                  confirmAction === 'useRemote'
+                    ? (theme === 'geek'
+                        ? 'border border-blue-500/50 bg-blue-900/30 hover:bg-blue-900/50 active:bg-blue-900/70 text-blue-400'
+                        : theme === 'cyber'
+                        ? 'border border-blue-500/50 bg-blue-900/30 hover:bg-blue-900/50 active:bg-blue-900/70 text-blue-400'
+                        : 'border border-blue-300 dark:border-blue-600 rounded bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white')
+                    : (theme === 'geek'
+                        ? 'border border-red-500/50 bg-red-900/30 hover:bg-red-900/50 active:bg-red-900/70 text-red-400'
+                        : theme === 'cyber'
+                        ? 'border border-fuchsia-500/50 bg-fuchsia-900/30 hover:bg-fuchsia-900/50 active:bg-fuchsia-900/70 text-fuchsia-400'
+                        : 'border border-red-300 dark:border-red-600 rounded bg-red-500 hover:bg-red-600 active:bg-red-700 text-white')
                 }`}
               >
                 {isExecuting
                   ? (theme === 'geek' ? '[...]' : theme === 'cyber' ? '...' : 'Working...')
-                  : (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Overwrite')
+                  : confirmAction === 'useRemote'
+                    ? (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Use Remote')
+                    : (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Overwrite')
                 }
               </button>
             </div>

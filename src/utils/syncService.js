@@ -559,7 +559,7 @@ export async function syncSettingsToCloud(settings, userId) {
  * @param {string} userId - User ID
  * @returns {Promise<{settings: Object|null, error?: string}>}
  */
-export async function loadSettingsFromCloud(userId) {
+export async function loadSettingsFromCloud(userId, parentSignal = null) {
   if (!isSupabaseConfigured || !supabase) {
     console.log('[Sync] loadSettingsFromCloud: Supabase not configured');
     return { settings: null, error: 'Supabase not configured' };
@@ -567,9 +567,9 @@ export async function loadSettingsFromCloud(userId) {
 
   console.log('[Sync] loadSettingsFromCloud: Loading settings');
 
-  // Create abort controller for this operation
-  const abortController = createSyncAbortController();
-  const signal = abortController.signal;
+  // Use parent signal if provided, otherwise create own controller
+  const ownController = parentSignal ? null : createSyncAbortController();
+  const signal = parentSignal || ownController.signal;
 
   try {
     setSyncStatus('syncing');
@@ -596,7 +596,9 @@ export async function loadSettingsFromCloud(userId) {
   } catch (err) {
     return handleSyncError(err, 'loadSettingsFromCloud', 'settings');
   } finally {
-    cleanupSyncAbortController(abortController);
+    if (ownController) {
+      cleanupSyncAbortController(ownController);
+    }
   }
 }
 
@@ -769,7 +771,7 @@ export async function syncCustomTextsToCloud(texts, userId) {
  * @param {string} userId - User ID
  * @returns {Promise<{texts: Array|null, error?: string}>}
  */
-export async function loadCustomTextsFromCloud(userId) {
+export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
   if (!isSupabaseConfigured || !supabase) {
     console.log('[Sync] loadCustomTextsFromCloud: Supabase not configured');
     return { texts: null, error: 'Supabase not configured' };
@@ -777,9 +779,9 @@ export async function loadCustomTextsFromCloud(userId) {
 
   console.log('[Sync] loadCustomTextsFromCloud: Loading texts');
 
-  // Create abort controller for this operation
-  const abortController = createSyncAbortController();
-  const signal = abortController.signal;
+  // Use parent signal if provided, otherwise create own controller
+  const ownController = parentSignal ? null : createSyncAbortController();
+  const signal = parentSignal || ownController.signal;
 
   try {
     setSyncStatus('syncing');
@@ -817,7 +819,9 @@ export async function loadCustomTextsFromCloud(userId) {
   } catch (err) {
     return handleSyncError(err, 'loadCustomTextsFromCloud', 'texts');
   } finally {
-    cleanupSyncAbortController(abortController);
+    if (ownController) {
+      cleanupSyncAbortController(ownController);
+    }
   }
 }
 
@@ -1332,6 +1336,87 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     return { success: true, insertedTexts };
   } catch (err) {
     return handleSyncError(err, 'forceOverwriteRemoteWithLocal');
+  } finally {
+    isForceOverwriting = false;
+    cleanupSyncAbortController(abortController);
+  }
+}
+
+/**
+ * Force overwrite local data with remote cloud data (destructive to local)
+ * Loads settings and texts from cloud and replaces all local data
+ * @param {string} userId - User ID
+ * @returns {Promise<{success: boolean, settings?: Object, texts?: Array, error?: string}>}
+ */
+export async function forceUseRemoteData(userId) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  if (!userId) {
+    return { success: false, error: 'User ID required' };
+  }
+
+  // Prevent concurrent force operations
+  if (isForceOverwriting) {
+    console.log('[Sync] forceUseRemoteData: Already in progress, skipping');
+    return { success: false, error: 'Force operation already in progress' };
+  }
+
+  isForceOverwriting = true;
+  console.log('[Sync] forceUseRemoteData: Starting');
+
+  // Create abort controller for this operation
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
+  try {
+    setSyncStatus('syncing');
+
+    // Load settings from cloud (pass signal for proper cancellation)
+    console.log('[Sync] forceUseRemoteData: Loading settings from cloud');
+    const settingsResult = await loadSettingsFromCloud(userId, signal);
+
+    // Check for cancellation
+    if (signal.aborted) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+
+    if (settingsResult.error && !settingsResult.settings) {
+      console.error('[Sync] forceUseRemoteData: Failed to load settings:', settingsResult.error);
+      setSyncStatus('error', settingsResult.error);
+      return { success: false, error: settingsResult.error };
+    }
+
+    // Load texts from cloud (pass signal for proper cancellation)
+    console.log('[Sync] forceUseRemoteData: Loading texts from cloud');
+    const textsResult = await loadCustomTextsFromCloud(userId, signal);
+
+    // Check for cancellation
+    if (signal.aborted) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+
+    if (textsResult.error && !textsResult.texts) {
+      console.error('[Sync] forceUseRemoteData: Failed to load texts:', textsResult.error);
+      setSyncStatus('error', textsResult.error);
+      return { success: false, error: textsResult.error };
+    }
+
+    // Clear pending changes since we're replacing local with remote
+    clearPendingChanges();
+
+    console.log('[Sync] forceUseRemoteData: Complete');
+    setSyncStatus('synced');
+    return {
+      success: true,
+      settings: settingsResult.settings || null,
+      texts: textsResult.texts || []
+    };
+  } catch (err) {
+    return handleSyncError(err, 'forceUseRemoteData');
   } finally {
     isForceOverwriting = false;
     cleanupSyncAbortController(abortController);
