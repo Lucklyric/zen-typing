@@ -194,28 +194,38 @@ function App() {
           }
           console.log('[Sync] Loaded from cloud:', { settings: settingsResult, texts: textsResult });
 
-          // Apply cloud settings to local
-          applyCloudSettings(settingsResult.settings);
+          const cloudTexts = textsResult.texts || [];
+          let migrationResult = null;
 
-          // Apply cloud texts to local (replace local with cloud)
-          if (textsResult.texts && textsResult.texts.length > 0) {
-            console.log('[Sync] Replacing local texts with cloud texts');
-            customTextStorage.replaceAll(textsResult.texts);
-            setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
-          } else if (localTexts.length > 0) {
+          if (cloudTexts.length === 0 && localTexts.length > 0) {
             // Cloud has settings but no texts - migrate local texts to cloud
             console.log('[Sync] Cloud has settings but no texts, migrating local texts...');
-            const textsResult2 = await syncCustomTextsToCloud(localTexts, userId);
+            migrationResult = await syncCustomTextsToCloud(localTexts, userId);
             // Bail out if user changed
             if (activeUserIdRef.current !== userId) {
               console.log('[Sync] User changed during sync, aborting');
               return;
             }
-            console.log('[Sync] Migration result:', textsResult2);
-            if (textsResult2.success && textsResult2.insertedTexts?.length > 0) {
-              customTextStorage.updateWithDbIds(textsResult2.insertedTexts);
-              setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
-            }
+            console.log('[Sync] Migration result:', migrationResult);
+          }
+
+          // Bail out if user changed before applying results
+          if (activeUserIdRef.current !== userId) {
+            console.log('[Sync] User changed during sync, aborting');
+            return;
+          }
+
+          // Apply cloud settings to local
+          applyCloudSettings(settingsResult.settings);
+
+          // Apply cloud texts to local (replace local with cloud)
+          if (cloudTexts.length > 0) {
+            console.log('[Sync] Replacing local texts with cloud texts');
+            customTextStorage.replaceAll(cloudTexts);
+            setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
+          } else if (migrationResult?.success && migrationResult.insertedTexts?.length > 0) {
+            customTextStorage.updateWithDbIds(migrationResult.insertedTexts);
+            setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
           }
         } else if (hasLocalData) {
           // No cloud data but has local data - migrate local to cloud
@@ -425,11 +435,16 @@ function App() {
   useEffect(() => {
     if (!isSupabaseConfigured || !user) return;
 
+    const userId = user.id;
     // Debounce to avoid rapid API calls
     const timeoutId = setTimeout(async () => {
+      if (activeUserIdRef.current !== userId) {
+        console.log('[Sync] Settings sync aborted due to user change');
+        return;
+      }
       const allSettings = settingsStorage.get();
       console.log('[Sync] Settings changed, syncing to cloud...');
-      const result = await syncSettingsToCloud(allSettings, user.id);
+      const result = await syncSettingsToCloud(allSettings, userId);
       if (!result.success) {
         console.error('[Sync] Settings sync failed:', result.error);
       }
@@ -565,7 +580,7 @@ function App() {
   }, []);
 
   const handleSyncRetry = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     console.log('[Sync] Retry triggered by user');
     setSyncError(null); // Clear error state first
@@ -608,7 +623,7 @@ function App() {
   }, [user]);
 
   const handleForceSync = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     console.log('[Sync] Force sync triggered by user');
     setSyncError(null); // Clear any previous error
@@ -705,6 +720,8 @@ function App() {
         } catch (storageErr) {
           console.error('[Sync] Force overwrite storage error:', storageErr);
           setSyncError('Failed to save data locally');
+          updateSyncServiceStatus('error', 'Failed to save data locally');
+          return; // Don't leave sync in success state
         }
       }
     } else {
@@ -741,6 +758,8 @@ function App() {
       } catch (storageErr) {
         console.error('[Sync] Force use remote storage error:', storageErr);
         setSyncError('Failed to save data locally');
+        updateSyncServiceStatus('error', 'Failed to save data locally');
+        return; // Don't leave sync in success state
       }
     } else {
       console.error('[Sync] Force use remote failed:', result.error);

@@ -311,6 +311,9 @@ export async function processPendingChanges(userId) {
   const abortController = createSyncAbortController();
   const signal = abortController.signal;
 
+  // This is the parent operation, so we manage status
+  setSyncStatus('syncing');
+
   try {
     // Snapshot pending changes at start (new changes during processing stay in queue)
     const pending = [...syncState.pendingChanges];
@@ -335,7 +338,7 @@ export async function processPendingChanges(userId) {
 
       try {
         if (change.type === 'settings') {
-          const result = await syncSettingsToCloud(change.data, userId);
+          const result = await syncSettingsToCloud(change.data, userId, signal);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
@@ -343,7 +346,7 @@ export async function processPendingChanges(userId) {
             if (result.cancelled || result.timeout) break;
           }
         } else if (change.type === 'texts') {
-          const result = await syncCustomTextsToCloud(change.data, userId);
+          const result = await syncCustomTextsToCloud(change.data, userId, signal);
           if (!result.success) {
             errors.push(result.error);
             failedChanges.push(change);
@@ -390,6 +393,11 @@ export async function processPendingChanges(userId) {
     // Successfully processed all pending changes
     setSyncStatus('synced');
     return { success: true, insertedTexts: allInsertedTexts };
+  } catch (err) {
+    // Handle unhandled exceptions and ensure counter is decremented
+    console.error('[Sync] processPendingChanges unhandled exception:', err);
+    setSyncStatus('error', err.message || 'Unexpected error occurred');
+    return { success: false, error: err.message || 'Unexpected error occurred' };
   } finally {
     isProcessingPending = false;
     cleanupSyncAbortController(abortController);
@@ -500,9 +508,10 @@ export function cancelActiveSync() {
  * Sync settings to cloud
  * @param {Object} settings - Settings object to sync
  * @param {string} userId - User ID
+ * @param {AbortSignal|null} parentSignal - Optional parent abort signal
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function syncSettingsToCloud(settings, userId) {
+export async function syncSettingsToCloud(settings, userId, parentSignal = null) {
   if (!isSupabaseConfigured || !supabase) {
     console.log('[Sync] syncSettingsToCloud: Supabase not configured');
     return { success: false, error: 'Supabase not configured' };
@@ -518,12 +527,15 @@ export async function syncSettingsToCloud(settings, userId) {
 
   console.log('[Sync] syncSettingsToCloud: Syncing settings');
 
-  // Create abort controller for this operation
-  const abortController = createSyncAbortController();
-  const signal = abortController.signal;
+  // Use parent signal if provided, otherwise create own controller
+  const ownController = parentSignal ? null : createSyncAbortController();
+  const signal = parentSignal || ownController.signal;
+
+  // Only manage status if we own the controller (not called from parent operation)
+  const manageStatus = !parentSignal;
 
   try {
-    setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus('syncing');
 
     const { error } = await withTimeout(
       supabase
@@ -540,17 +552,31 @@ export async function syncSettingsToCloud(settings, userId) {
 
     if (error) {
       console.error('[Sync] syncSettingsToCloud error:', error);
-      setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus('error', error.message);
       return { success: false, error: error.message };
     }
 
     console.log('[Sync] syncSettingsToCloud: Success');
-    setSyncStatus('synced');
+    if (manageStatus) setSyncStatus('synced');
     return { success: true };
   } catch (err) {
-    return handleSyncError(err, 'syncSettingsToCloud');
+    // handleSyncError always sets status, so only call it when managing status
+    if (manageStatus) {
+      return handleSyncError(err, 'syncSettingsToCloud');
+    }
+    // When not managing status, return error without setting status
+    console.error('[Sync] syncSettingsToCloud exception:', err);
+    if (err.name === 'AbortError') {
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { success: false, error: 'Sync timed out', timeout: true };
+    }
+    return { success: false, error: err.message };
   } finally {
-    cleanupSyncAbortController(abortController);
+    if (ownController) {
+      cleanupSyncAbortController(ownController);
+    }
   }
 }
 
@@ -571,8 +597,11 @@ export async function loadSettingsFromCloud(userId, parentSignal = null) {
   const ownController = parentSignal ? null : createSyncAbortController();
   const signal = parentSignal || ownController.signal;
 
+  // Only manage status if we own the controller (not called from parent operation)
+  const manageStatus = !parentSignal;
+
   try {
-    setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus('syncing');
 
     const { data, error } = await withTimeout(
       supabase
@@ -586,15 +615,27 @@ export async function loadSettingsFromCloud(userId, parentSignal = null) {
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows returned (not an error for new users)
       console.error('[Sync] loadSettingsFromCloud error:', error);
-      setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus('error', error.message);
       return { settings: null, error: error.message };
     }
 
     console.log('[Sync] loadSettingsFromCloud: Got settings:', data?.settings ? 'yes' : 'none');
-    setSyncStatus('synced');
+    if (manageStatus) setSyncStatus('synced');
     return { settings: data?.settings || null };
   } catch (err) {
-    return handleSyncError(err, 'loadSettingsFromCloud', 'settings');
+    // handleSyncError always sets status, so only call it when managing status
+    if (manageStatus) {
+      return handleSyncError(err, 'loadSettingsFromCloud', 'settings');
+    }
+    // When not managing status, return error without setting status
+    console.error('[Sync] loadSettingsFromCloud exception:', err);
+    if (err.name === 'AbortError') {
+      return { settings: null, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { settings: null, error: 'Sync timed out', timeout: true };
+    }
+    return { settings: null, error: err.message };
   } finally {
     if (ownController) {
       cleanupSyncAbortController(ownController);
@@ -610,9 +651,10 @@ export async function loadSettingsFromCloud(userId, parentSignal = null) {
  * Sync custom texts to cloud
  * @param {Array} texts - Array of text entries
  * @param {string} userId - User ID
+ * @param {AbortSignal|null} parentSignal - Optional parent abort signal
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function syncCustomTextsToCloud(texts, userId) {
+export async function syncCustomTextsToCloud(texts, userId, parentSignal = null) {
   if (!isSupabaseConfigured || !supabase) {
     console.log('[Sync] syncCustomTextsToCloud: Supabase not configured');
     return { success: false, error: 'Supabase not configured' };
@@ -628,12 +670,15 @@ export async function syncCustomTextsToCloud(texts, userId) {
 
   console.log(`[Sync] syncCustomTextsToCloud: Processing ${texts.length} texts`);
 
-  // Create abort controller for this operation
-  const abortController = createSyncAbortController();
-  const signal = abortController.signal;
+  // Use parent signal if provided, otherwise create own controller
+  const ownController = parentSignal ? null : createSyncAbortController();
+  const signal = parentSignal || ownController.signal;
+
+  // Only manage status if we own the controller (not called from parent operation)
+  const manageStatus = !parentSignal;
 
   try {
-    setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus('syncing');
 
     // Validate and transform texts to match database schema
     const validTexts = texts.filter((t) => {
@@ -751,18 +796,32 @@ export async function syncCustomTextsToCloud(texts, userId) {
     }
 
     if (errors.length > 0) {
-      setSyncStatus('error', errors.join('; '));
+      if (manageStatus) setSyncStatus('error', errors.join('; '));
       return { success: false, error: errors.join('; ') };
     }
 
-    setSyncStatus('synced');
+    if (manageStatus) setSyncStatus('synced');
 
     // Return inserted texts so caller can update local storage with DB IDs
     return { success: true, insertedTexts };
   } catch (err) {
-    return handleSyncError(err, 'syncCustomTextsToCloud');
+    // handleSyncError always sets status, so only call it when managing status
+    if (manageStatus) {
+      return handleSyncError(err, 'syncCustomTextsToCloud');
+    }
+    // When not managing status, return error without setting status
+    console.error('[Sync] syncCustomTextsToCloud exception:', err);
+    if (err.name === 'AbortError') {
+      return { success: false, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { success: false, error: 'Sync timed out', timeout: true };
+    }
+    return { success: false, error: err.message };
   } finally {
-    cleanupSyncAbortController(abortController);
+    if (ownController) {
+      cleanupSyncAbortController(ownController);
+    }
   }
 }
 
@@ -783,8 +842,11 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
   const ownController = parentSignal ? null : createSyncAbortController();
   const signal = parentSignal || ownController.signal;
 
+  // Only manage status if we own the controller (not called from parent operation)
+  const manageStatus = !parentSignal;
+
   try {
-    setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus('syncing');
 
     const { data, error } = await withTimeout(
       supabase
@@ -797,7 +859,7 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
 
     if (error) {
       console.error('[Sync] loadCustomTextsFromCloud error:', error);
-      setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus('error', error.message);
       return { texts: null, error: error.message };
     }
 
@@ -814,10 +876,22 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
       updatedAt: t.updated_at,
     }));
 
-    setSyncStatus('synced');
+    if (manageStatus) setSyncStatus('synced');
     return { texts };
   } catch (err) {
-    return handleSyncError(err, 'loadCustomTextsFromCloud', 'texts');
+    // handleSyncError always sets status, so only call it when managing status
+    if (manageStatus) {
+      return handleSyncError(err, 'loadCustomTextsFromCloud', 'texts');
+    }
+    // When not managing status, return error without setting status
+    console.error('[Sync] loadCustomTextsFromCloud exception:', err);
+    if (err.name === 'AbortError') {
+      return { texts: null, error: 'Sync cancelled', cancelled: true };
+    }
+    if (err.name === 'TimeoutError') {
+      return { texts: null, error: 'Sync timed out', timeout: true };
+    }
+    return { texts: null, error: err.message };
   } finally {
     if (ownController) {
       cleanupSyncAbortController(ownController);
