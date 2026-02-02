@@ -48,12 +48,14 @@ export default function SyncStatus({
   }, [showMenu, showConfirm, showCancelDialog]);
 
   const [isExecuting, setIsExecuting] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
   const handleConfirmAction = async () => {
     // Prevent double-clicks during execution
     if (isExecuting) return;
 
     setIsExecuting(true);
+    setActionError(null);
     setShowMenu(false);
     // Keep confirmation dialog open during execution to show "Working..." state
 
@@ -61,16 +63,26 @@ export default function SyncStatus({
     if (action) {
       try {
         await action();
-      } finally {
+        // Success - close the dialog
         setIsExecuting(false);
         setShowConfirm(false);
         setConfirmAction(null);
+      } catch (error) {
+        // Error - keep dialog open and show error
+        setIsExecuting(false);
+        setActionError(error.message || 'Operation failed');
       }
     } else {
       setIsExecuting(false);
       setShowConfirm(false);
       setConfirmAction(null);
     }
+  };
+
+  const handleDismissConfirm = () => {
+    setShowConfirm(false);
+    setConfirmAction(null);
+    setActionError(null);
   };
 
   // Synced state: clickable to show sync options menu
@@ -213,12 +225,20 @@ export default function SyncStatus({
                     : '⚠ This will delete all cloud data and replace with local')
               }
             </p>
+            {actionError && (
+              <p className={`mb-3 text-center sm:text-left text-xs ${
+                theme === 'geek'
+                  ? 'text-red-400 font-mono'
+                  : theme === 'cyber'
+                  ? 'text-fuchsia-400 font-mono'
+                  : 'text-red-600 dark:text-red-400'
+              }`}>
+                {theme === 'geek' ? `[ERR: ${actionError}]` : theme === 'cyber' ? `ERR: ${actionError}` : `Error: ${actionError}`}
+              </p>
+            )}
             <div className="flex gap-3 sm:gap-2">
               <button
-                onClick={() => {
-                  setShowConfirm(false);
-                  setConfirmAction(null);
-                }}
+                onClick={handleDismissConfirm}
                 className={`flex-1 px-3 py-3 sm:py-2 ${
                   theme === 'geek'
                     ? 'border border-green-500/50 hover:bg-green-900/30 active:bg-green-900/50'
@@ -250,9 +270,11 @@ export default function SyncStatus({
               >
                 {isExecuting
                   ? (theme === 'geek' ? '[...]' : theme === 'cyber' ? '...' : 'Working...')
-                  : confirmAction === 'useRemote'
-                    ? (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Use Remote')
-                    : (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Overwrite')
+                  : actionError
+                    ? (theme === 'geek' ? '[RETRY]' : theme === 'cyber' ? 'RETRY' : 'Retry')
+                    : confirmAction === 'useRemote'
+                      ? (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Use Remote')
+                      : (theme === 'geek' ? '[YES]' : theme === 'cyber' ? 'CONFIRM' : 'Overwrite')
                 }
               </button>
             </div>

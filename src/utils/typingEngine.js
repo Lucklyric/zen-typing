@@ -128,23 +128,41 @@ export class TypingEngine {
       this.currentWordIndex--;
       this.currentCharIndex = this.words[this.currentWordIndex].length;
       this.typedText = this.typedText.slice(0, -1);
-      
-      // Remove errors that are being deleted
-      const currentPos = this.getAbsolutePosition();
-      this.errors = this.errors.filter(err => err.position < currentPos);
-      
+
+      // Decrement keystroke counters for the deleted character
+      if (this.keystrokes > 0) {
+        this.keystrokes--;
+        // Check if the deleted character was correct (no error at this position)
+        const currentPos = this.getAbsolutePosition();
+        const hadErrorAtPos = this.errors.some(err => err.position === currentPos);
+        if (!hadErrorAtPos && this.correctKeystrokes > 0) {
+          this.correctKeystrokes--;
+        }
+        // Remove errors that are being deleted
+        this.errors = this.errors.filter(err => err.position < currentPos);
+      }
+
       return true;
     }
-    
+
     // If we're not at the beginning of the typing session
     if (this.currentCharIndex > 0) {
       this.currentCharIndex--;
       this.typedText = this.typedText.slice(0, -1);
-      
-      // Remove errors that are being deleted
-      const currentPos = this.getAbsolutePosition();
-      this.errors = this.errors.filter(err => err.position < currentPos);
-      
+
+      // Decrement keystroke counters for the deleted character
+      if (this.keystrokes > 0) {
+        this.keystrokes--;
+        // Check if the deleted character was correct (no error at this position)
+        const currentPos = this.getAbsolutePosition();
+        const hadErrorAtPos = this.errors.some(err => err.position === currentPos);
+        if (!hadErrorAtPos && this.correctKeystrokes > 0) {
+          this.correctKeystrokes--;
+        }
+        // Remove errors that are being deleted
+        this.errors = this.errors.filter(err => err.position < currentPos);
+      }
+
       return true;
     }
 
@@ -220,13 +238,15 @@ export class TypingEngine {
     const minutes = duration / 60000;
     const totalChars = this.typedText.length;
     const words = totalChars / 5; // Standard WPM calculation
-    const grossWPM = words / minutes;
-    const accuracy = (this.correctKeystrokes / this.keystrokes) * 100;
-    const netWPM = (grossWPM * accuracy) / 100;
+
+    // Guard against division by zero
+    const grossWPM = minutes > 0 ? words / minutes : 0;
+    const accuracy = this.keystrokes > 0 ? (this.correctKeystrokes / this.keystrokes) * 100 : 100;
+    const netWPM = minutes > 0 ? (grossWPM * accuracy) / 100 : 0;
 
     return {
-      grossWPM: Math.round(grossWPM),
-      netWPM: Math.round(netWPM),
+      grossWPM: Math.round(grossWPM) || 0,
+      netWPM: Math.round(netWPM) || 0,
       accuracy: Math.round(accuracy * 10) / 10,
       duration: Math.round(duration / 1000),
       errors: this.errors.length,

@@ -20,8 +20,11 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
  * @property {string|null} error - Last error message
  */
 
-// localStorage key for persisting pending changes
-const PENDING_CHANGES_KEY = 'zen-typing-pending-sync';
+// Base localStorage key for persisting pending changes (will be scoped by user ID)
+const PENDING_CHANGES_KEY_PREFIX = 'zen-typing-pending-sync';
+
+// Track current user ID for scoped storage
+let currentUserId = null;
 
 // UUID v4 pattern (Supabase uses UUID for primary keys)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,26 +39,65 @@ function isUUID(id) {
   return typeof id === 'string' && UUID_REGEX.test(id);
 }
 
-// Load persisted pending changes from localStorage
+/**
+ * Get the user-scoped localStorage key for pending changes
+ * @returns {string}
+ */
+function getPendingChangesKey() {
+  return currentUserId
+    ? `${PENDING_CHANGES_KEY_PREFIX}-${currentUserId}`
+    : PENDING_CHANGES_KEY_PREFIX;
+}
+
+/**
+ * Set the current user ID for scoped storage
+ * @param {string|null} userId
+ */
+export function setCurrentUserId(userId) {
+  const previousUserId = currentUserId;
+  currentUserId = userId;
+
+  // If user changed, reload pending changes for new user
+  if (previousUserId !== userId) {
+    syncState.pendingChanges = loadPersistedPendingChanges();
+    subscribers.forEach((callback) => callback(getSyncState()));
+  }
+}
+
+// Load persisted pending changes from localStorage (user-scoped)
 function loadPersistedPendingChanges() {
   try {
-    const stored = localStorage.getItem(PENDING_CHANGES_KEY);
+    const stored = localStorage.getItem(getPendingChangesKey());
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
   }
 }
 
-// Persist pending changes to localStorage
+// Persist pending changes to localStorage (user-scoped)
 function persistPendingChanges(changes) {
   try {
+    const key = getPendingChangesKey();
     if (changes.length === 0) {
-      localStorage.removeItem(PENDING_CHANGES_KEY);
+      localStorage.removeItem(key);
     } else {
-      localStorage.setItem(PENDING_CHANGES_KEY, JSON.stringify(changes));
+      localStorage.setItem(key, JSON.stringify(changes));
     }
   } catch (err) {
     console.error('Failed to persist pending changes:', err);
+  }
+}
+
+/**
+ * Clear pending changes for current user (call on sign out)
+ */
+export function clearCurrentUserPendingChanges() {
+  if (currentUserId) {
+    try {
+      localStorage.removeItem(getPendingChangesKey());
+    } catch (err) {
+      console.error('Failed to clear user pending changes:', err);
+    }
   }
 }
 
@@ -465,13 +507,16 @@ export function initNetworkListeners() {
  * Reset sync state (call on sign out)
  */
 export function resetSyncState() {
+  // Clear user-scoped pending changes before resetting user ID
+  clearCurrentUserPendingChanges();
+  currentUserId = null;
+
   syncState = { ...initialSyncState };
   activeSyncCount = 0; // Reset sync counter to prevent stuck 'syncing' status
   isProcessingPending = false; // Reset mutex to allow future processing
   isForceOverwriting = false; // Reset force overwrite mutex
   // Cancel and clear all active sync controllers
   cancelActiveSync();
-  persistPendingChanges([]); // Clear persisted pending changes
   subscribers.forEach((callback) => callback(getSyncState()));
 }
 
@@ -1176,12 +1221,19 @@ export async function checkCloudData(userId) {
     return { hasSettings: false, hasTexts: false, textsCount: 0 };
   }
 
+  // Create abort controller for timeout
+  const abortController = createSyncAbortController();
+  const signal = abortController.signal;
+
   try {
-    // Use count-only queries to minimize data transfer
-    const [settingsResult, textsResult] = await Promise.all([
-      supabase.from('user_settings').select('user_id', { count: 'exact', head: true }).eq('user_id', userId),
-      supabase.from('custom_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-    ]);
+    // Use count-only queries to minimize data transfer, wrapped with timeout
+    const [settingsResult, textsResult] = await withTimeout(
+      Promise.all([
+        supabase.from('user_settings').select('user_id', { count: 'exact', head: true }).eq('user_id', userId),
+        supabase.from('custom_texts').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      ]),
+      signal
+    );
 
     // Log any errors from the queries
     if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
@@ -1198,7 +1250,12 @@ export async function checkCloudData(userId) {
     };
   } catch (err) {
     console.error('[Sync] checkCloudData exception:', err);
+    if (err.name === 'TimeoutError') {
+      return { hasSettings: false, hasTexts: false, textsCount: 0, error: 'Check timed out' };
+    }
     return { hasSettings: false, hasTexts: false, textsCount: 0, error: err.message };
+  } finally {
+    cleanupSyncAbortController(abortController);
   }
 }
 

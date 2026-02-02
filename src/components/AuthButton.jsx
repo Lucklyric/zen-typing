@@ -9,6 +9,7 @@ export default function AuthButton({
   theme,
   user,
   authState = 'idle',
+  authError = null,
   onSignIn,
   onSignOut,
   onCancel,
@@ -89,6 +90,35 @@ export default function AuthButton({
             theme === 'geek' || theme === 'cyber' ? 'font-mono' : ''
           }`}
           title="Cancel"
+        >
+          {theme === 'geek' ? '[X]' : theme === 'cyber' ? '×' : '✕'}
+        </button>
+      </div>
+    );
+  }
+
+  // Error state
+  if (authState === 'error') {
+    return (
+      <div className={`flex items-center gap-2 px-3 py-2 min-h-[44px] text-sm ${
+        theme === 'geek'
+          ? 'font-mono border border-red-500/50 bg-red-900/20 text-red-400'
+          : theme === 'cyber'
+          ? 'font-mono border border-fuchsia-500/50 bg-fuchsia-900/20 text-fuchsia-400'
+          : 'rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+      }`}>
+        <span>
+          {theme === 'geek' ? '[!]' : theme === 'cyber' ? '⚠' : '⚠️'}
+        </span>
+        <span className="hidden sm:inline max-w-[100px] truncate" title={authError || 'Auth error'}>
+          {theme === 'geek' ? 'ERROR' : theme === 'cyber' ? 'ERR' : 'Error'}
+        </span>
+        <button
+          onClick={handleCancel}
+          className={`ml-1 opacity-60 hover:opacity-100 ${
+            theme === 'geek' || theme === 'cyber' ? 'font-mono' : ''
+          }`}
+          title="Dismiss"
         >
           {theme === 'geek' ? '[X]' : theme === 'cyber' ? '×' : '✕'}
         </button>

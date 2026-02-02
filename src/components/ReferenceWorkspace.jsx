@@ -3,12 +3,13 @@ import SplitPane from './SplitPane';
 import ReferenceDisplay from './ReferenceDisplay';
 import TypingArea from './TypingArea';
 
-const ReferenceWorkspace = ({ 
-  referenceText, 
-  typingText, 
-  onComplete, 
-  showIPA = false, 
-  dictationMode = false, 
+const ReferenceWorkspace = ({
+  referenceText,
+  typingText,
+  onComplete,
+  onProgressChange,
+  showIPA = false,
+  dictationMode = false,
   theme = 'normal',
   splitRatio = 0.5,
   onSplitRatioChange,
@@ -32,6 +33,7 @@ const ReferenceWorkspace = ({
           <TypingArea
             text={typingText}
             onComplete={onComplete}
+            onProgressChange={onProgressChange}
             showIPA={showIPA}
             dictationMode={dictationMode}
             theme={theme}

@@ -57,7 +57,10 @@ function SessionStats({ completedSessions, theme = 'normal' }) {
       const previous = completedSessions.slice(-10, -5);
       const recentAvg = recent.reduce((sum, s) => sum + s.netWPM, 0) / 5;
       const previousAvg = previous.reduce((sum, s) => sum + s.netWPM, 0) / 5;
-      improvementRate = ((recentAvg - previousAvg) / previousAvg * 100).toFixed(1);
+      // Guard against division by zero
+      if (previousAvg > 0) {
+        improvementRate = ((recentAvg - previousAvg) / previousAvg * 100).toFixed(1);
+      }
     }
 
     setStats({

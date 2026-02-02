@@ -27,6 +27,7 @@ import {
   processPendingChanges,
   setOnReconnectCallback,
   setSyncStatus as updateSyncServiceStatus,
+  setCurrentUserId,
   migrateLocalToCloud,
   checkCloudData,
   loadSettingsFromCloud,
@@ -99,7 +100,7 @@ function App() {
   // Auth state (Cloud Sync)
   const [user, setUser] = useState(null);
   const [authState, setAuthState] = useState('idle'); // 'idle' | 'loading' | 'awaiting' | 'error'
-  const [authError, setAuthError] = useState(null); // eslint-disable-line no-unused-vars -- Will be used for error display
+  const [authError, setAuthError] = useState(null);
   const activeUserIdRef = useRef(null); // Track active user to prevent race conditions
 
   // Sync state (Cloud Sync)
@@ -156,6 +157,8 @@ function App() {
       const newUserId = session?.user?.id || null;
       setUser(session?.user || null);
       activeUserIdRef.current = newUserId;
+      // Update sync service with current user ID for scoped storage
+      setCurrentUserId(newUserId);
 
       // Trigger sync on SIGNED_IN (new sign-in) or INITIAL_SESSION (returning user)
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
@@ -249,6 +252,9 @@ function App() {
         setAuthState('idle');
         activeUserIdRef.current = null;
         resetSyncState();
+        // Clear user data from localStorage to prevent cross-account data leakage
+        customTextStorage.clearAll();
+        settingsStorage.clear();
       }
     });
 
@@ -990,6 +996,7 @@ function App() {
                     theme={theme}
                     user={user}
                     authState={authState}
+                    authError={authError}
                     onSignIn={handleSignIn}
                     onSignOut={handleSignOut}
                     onCancel={handleAuthCancel}
@@ -1099,6 +1106,7 @@ function App() {
                       referenceText={selectedEntry.referenceText}
                       typingText={selectedEntry.text}
                       onComplete={handleComplete}
+                      onProgressChange={handleProgressChange}
                       showIPA={showIPA}
                       dictationMode={dictationMode}
                       theme={theme}
