@@ -276,6 +276,10 @@ function App() {
 
           // Apply cloud settings to local only after texts storage succeeded
           applyCloudSettings(settingsResult.settings);
+
+          // Clear any pending changes since cloud is now source of truth
+          // This prevents stale offline changes from replaying on reconnect
+          clearPendingChanges();
         } else if (hasLocalData) {
           // No cloud data but has local data - migrate local to cloud
           console.log('[Sync] No cloud data, migrating local data to cloud...');
@@ -638,8 +642,22 @@ function App() {
       customTextStorage.updateWithDbIds(pendingResult.insertedTexts);
     }
 
-    // If pending succeeded or was skipped (no pending), do a full sync
-    if (pendingResult.success || pendingResult.skipped) {
+    // Handle skipped result (another sync in progress) - don't start concurrent sync
+    if (pendingResult.skipped) {
+      console.log('[Sync] Retry: Pending processing skipped (sync already in progress)');
+      // Don't start another sync to avoid concurrent operations
+      return;
+    }
+
+    // Handle offline result explicitly
+    if (pendingResult.offline) {
+      console.log('[Sync] Retry: Device is offline');
+      setSyncError('Device is offline');
+      return;
+    }
+
+    // If pending succeeded, do a full sync
+    if (pendingResult.success) {
       // Get current local data
       const localTexts = customTextStorage.getAll();
       const localSettings = settingsStorage.get();
@@ -696,6 +714,12 @@ function App() {
       lastError = settingsSyncResult.error;
     }
 
+    // Bail out if user changed during async operation (security: prevent cross-account data leakage)
+    if (user?.id !== userId) {
+      console.log('[Sync] Force sync: User changed during settings push, aborting');
+      return;
+    }
+
     // Sync local texts to cloud
     if (localTexts.length > 0) {
       const syncResult = await syncCustomTextsToCloud(localTexts, userId);
@@ -708,6 +732,12 @@ function App() {
         pushSucceeded = false;
         lastError = syncResult.error;
       }
+    }
+
+    // Bail out if user changed during async operation
+    if (user?.id !== userId) {
+      console.log('[Sync] Force sync: User changed during texts push, aborting');
+      return;
     }
 
     // Only pull from cloud if push succeeded to avoid data loss
@@ -728,6 +758,12 @@ function App() {
       return;
     }
 
+    // Bail out if user changed during async operation
+    if (user?.id !== userId) {
+      console.log('[Sync] Force sync: User changed during settings load, aborting');
+      return;
+    }
+
     // Load texts from cloud to ensure we have latest
     const cloudResult = await loadCustomTextsFromCloud(userId);
     console.log('[Sync] Force sync cloud texts:', cloudResult);
@@ -736,6 +772,12 @@ function App() {
     if (cloudResult.error) {
       console.error('[Sync] Force sync: Failed to load cloud texts:', cloudResult.error);
       setSyncError(cloudResult.error);
+      return;
+    }
+
+    // Bail out if user changed during async operation
+    if (user?.id !== userId) {
+      console.log('[Sync] Force sync: User changed during texts load, aborting');
       return;
     }
 
@@ -796,6 +838,7 @@ function App() {
         } catch (storageErr) {
           console.error('[Sync] Force overwrite storage error:', storageErr);
           setSyncError('Failed to save data locally');
+          updateSyncServiceStatus('error', 'Failed to save data locally');
           throw new Error('Failed to save data locally'); // Keep modal open with actionError
         }
       }
@@ -837,6 +880,7 @@ function App() {
       } catch (storageErr) {
         console.error('[Sync] Force use remote storage error:', storageErr);
         setSyncError('Failed to save data locally');
+        updateSyncServiceStatus('error', 'Failed to save data locally');
         throw new Error('Failed to save data locally'); // Keep modal open with actionError
       }
 
