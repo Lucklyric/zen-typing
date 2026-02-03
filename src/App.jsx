@@ -500,7 +500,7 @@ function App() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [user, themePreference, showIPA, soundEnabled, dictationMode, showHistory, focusMode, splitRatio, centerAreaHeight]);
+  }, [user, themePreference, themeExplicitlySet, showIPA, soundEnabled, dictationMode, showHistory, activeSection, focusMode, splitRatio, centerAreaHeight]);
 
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
@@ -671,16 +671,29 @@ function App() {
         return;
       }
 
+      // Bail out if user changed during async operation
+      if (activeUserIdRef.current !== userId) {
+        console.log('[Sync] Retry: User changed during settings sync, aborting');
+        return;
+      }
+
       // Sync local texts to cloud
       if (localTexts.length > 0) {
         const textsResult = await syncCustomTextsToCloud(localTexts, userId);
         if (textsResult.success && textsResult.insertedTexts?.length > 0) {
           customTextStorage.updateWithDbIds(textsResult.insertedTexts);
+          setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh after ID update
         } else if (!textsResult.success) {
           console.error('[Sync] Retry texts sync failed:', textsResult.error);
           setSyncError(textsResult.error || 'Texts sync failed');
           return;
         }
+      }
+
+      // Bail out if user changed during async operation
+      if (activeUserIdRef.current !== userId) {
+        console.log('[Sync] Retry: User changed during texts sync, aborting');
+        return;
       }
 
       console.log('[Sync] Retry sync completed successfully');
@@ -715,7 +728,7 @@ function App() {
     }
 
     // Bail out if user changed during async operation (security: prevent cross-account data leakage)
-    if (user?.id !== userId) {
+    if (activeUserIdRef.current !== userId) {
       console.log('[Sync] Force sync: User changed during settings push, aborting');
       return;
     }
@@ -735,7 +748,7 @@ function App() {
     }
 
     // Bail out if user changed during async operation
-    if (user?.id !== userId) {
+    if (activeUserIdRef.current !== userId) {
       console.log('[Sync] Force sync: User changed during texts push, aborting');
       return;
     }
@@ -759,7 +772,7 @@ function App() {
     }
 
     // Bail out if user changed during async operation
-    if (user?.id !== userId) {
+    if (activeUserIdRef.current !== userId) {
       console.log('[Sync] Force sync: User changed during settings load, aborting');
       return;
     }
@@ -776,7 +789,7 @@ function App() {
     }
 
     // Bail out if user changed during async operation
-    if (user?.id !== userId) {
+    if (activeUserIdRef.current !== userId) {
       console.log('[Sync] Force sync: User changed during texts load, aborting');
       return;
     }
