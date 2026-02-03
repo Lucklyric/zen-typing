@@ -250,8 +250,10 @@ function App() {
         }
       } else if (event === 'SIGNED_OUT') {
         setAuthState('idle');
-        activeUserIdRef.current = null;
+        // Clear sync state BEFORE nullifying user ID to ensure user-scoped pending changes are cleared
         resetSyncState();
+        activeUserIdRef.current = null;
+        setCurrentUserId(null);
         // Clear user data from localStorage to prevent cross-account data leakage
         customTextStorage.clearAll();
         settingsStorage.clear();
@@ -732,7 +734,9 @@ function App() {
       }
     } else {
       console.error('[Sync] Force overwrite failed:', result.error);
-      setSyncError(result.error || 'Force overwrite failed'); // Surface error to UI
+      const errorMsg = result.error || 'Force overwrite failed';
+      setSyncError(errorMsg); // Surface error to UI
+      throw new Error(errorMsg); // Throw so SyncStatus modal can display actionError
     }
   }, [user]);
 
@@ -769,7 +773,9 @@ function App() {
       }
     } else {
       console.error('[Sync] Force use remote failed:', result.error);
-      setSyncError(result.error || 'Force use remote failed');
+      const errorMsg = result.error || 'Force use remote failed';
+      setSyncError(errorMsg);
+      throw new Error(errorMsg); // Throw so SyncStatus modal can display actionError
     }
   }, [user, applyCloudSettings]);
 

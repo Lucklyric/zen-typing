@@ -125,6 +125,11 @@ const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dicta
               .filter(err => err.charIndex < engine.currentCharIndex)
           }));
         }
+
+        // Notify parent of progress change after backspace
+        if (onProgressChange) {
+          onProgressChange(engine.getAbsolutePosition());
+        }
       }
       return;
     }
