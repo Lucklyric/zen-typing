@@ -1248,7 +1248,10 @@ export async function checkCloudData(userId) {
 
     // Return error if either query had a real error (not just "no rows")
     if (isRealError(settingsResult.error) || isRealError(textsResult.error)) {
-      const errorMsg = settingsResult.error?.message || textsResult.error?.message || 'Query failed';
+      // Only use error messages from real errors (non-PGRST116)
+      const realSettingsError = isRealError(settingsResult.error) ? settingsResult.error?.message : null;
+      const realTextsError = isRealError(textsResult.error) ? textsResult.error?.message : null;
+      const errorMsg = realSettingsError || realTextsError || 'Query failed';
       return { hasSettings: false, hasTexts: false, textsCount: 0, error: errorMsg };
     }
 

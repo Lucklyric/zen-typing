@@ -734,7 +734,7 @@ function App() {
       // Update local text IDs with new DB IDs (with error handling)
       if (result.insertedTexts?.length > 0) {
         try {
-          customTextStorage.replaceAll(result.insertedTexts.map(t => ({
+          const storageSuccess = customTextStorage.replaceAll(result.insertedTexts.map(t => ({
             id: t.id,
             text: t.text,
             mode: t.mode,
@@ -743,6 +743,9 @@ function App() {
             createdAt: t.created_at,
             updatedAt: t.updated_at,
           })));
+          if (!storageSuccess) {
+            throw new Error('Failed to save data locally');
+          }
           setHistoryRefreshKey((k) => k + 1);
         } catch (storageErr) {
           console.error('[Sync] Force overwrite storage error:', storageErr);
@@ -776,11 +779,15 @@ function App() {
 
       // Replace local texts with cloud texts (with error handling)
       try {
+        let storageSuccess;
         if (result.texts && result.texts.length > 0) {
-          customTextStorage.replaceAll(result.texts);
+          storageSuccess = customTextStorage.replaceAll(result.texts);
         } else {
           // Cloud has no texts, clear local
-          customTextStorage.clearAll();
+          storageSuccess = customTextStorage.clearAll();
+        }
+        if (!storageSuccess) {
+          throw new Error('Failed to save data locally');
         }
         setHistoryRefreshKey((k) => k + 1);
       } catch (storageErr) {
