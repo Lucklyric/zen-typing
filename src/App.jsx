@@ -166,8 +166,11 @@ function App() {
           activeUserIdRef.current = null;
           setCurrentUserId(null);
           // Clear user data from localStorage to prevent cross-account data leakage
-          customTextStorage.clearAll();
-          settingsStorage.clear();
+          const textsCleared = customTextStorage.clearAll();
+          const settingsCleared = settingsStorage.clear();
+          if (!textsCleared || !settingsCleared) {
+            console.warn('[Sync] Sign-out: Failed to clear some local data');
+          }
         } else {
           // No session (e.g., INITIAL_SESSION without user) - just clear user tracking without wiping data
           activeUserIdRef.current = null;
@@ -252,7 +255,12 @@ function App() {
           // Apply cloud texts to local (replace local with cloud)
           if (cloudTexts.length > 0) {
             console.log('[Sync] Replacing local texts with cloud texts');
-            customTextStorage.replaceAll(cloudTexts);
+            const storageSuccess = customTextStorage.replaceAll(cloudTexts);
+            if (!storageSuccess) {
+              console.error('[Sync] Failed to save cloud texts locally');
+              setSyncError('Failed to save data locally');
+              return;
+            }
             setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
           } else if (migrationResult?.success && migrationResult.insertedTexts?.length > 0) {
             customTextStorage.updateWithDbIds(migrationResult.insertedTexts);
@@ -704,11 +712,16 @@ function App() {
     console.log('[Sync] Force sync cloud texts:', cloudResult);
 
     if (cloudResult.texts && cloudResult.texts.length > 0) {
-      customTextStorage.replaceAll(cloudResult.texts);
+      const storageSuccess = customTextStorage.replaceAll(cloudResult.texts);
+      if (!storageSuccess) {
+        console.error('[Sync] Force sync: Failed to save cloud texts locally');
+        setSyncError('Failed to save data locally');
+        return;
+      }
       setHistoryRefreshKey((k) => k + 1);
     }
 
-    // Clear pending changes after successful force sync to prevent duplicates on reconnect
+    // Clear pending changes only after successful force sync to prevent duplicates on reconnect
     clearPendingChanges();
 
     console.log('[Sync] Force sync complete');
@@ -774,10 +787,8 @@ function App() {
       console.log('[Sync] Force use remote successful');
       setSyncError(null); // Clear any previous error
 
-      // Apply settings from cloud
-      applyCloudSettings(result.settings);
-
-      // Replace local texts with cloud texts (with error handling)
+      // Replace local texts with cloud texts BEFORE applying settings
+      // This ensures we don't have partial state if storage fails
       try {
         let storageSuccess;
         if (result.texts && result.texts.length > 0) {
@@ -795,6 +806,9 @@ function App() {
         setSyncError('Failed to save data locally');
         throw new Error('Failed to save data locally'); // Keep modal open with actionError
       }
+
+      // Apply settings from cloud only after texts storage succeeded
+      applyCloudSettings(result.settings);
     } else {
       console.error('[Sync] Force use remote failed:', result.error);
       const errorMsg = result.error || 'Force use remote failed';
