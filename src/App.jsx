@@ -329,11 +329,20 @@ function App() {
 
     setOnReconnectCallback(async () => {
       if (user) {
-        const result = await processPendingChanges(user.id);
+        const userId = user.id;
+        const result = await processPendingChanges(userId);
+
+        // Bail out if user changed during async operation (security: prevent cross-account data leakage)
+        if (activeUserIdRef.current !== userId) {
+          console.log('[Sync] Reconnect: User changed during pending changes processing, aborting');
+          return;
+        }
+
         // Always update local IDs with database UUIDs, even on partial failure
         // This prevents duplicate inserts for texts that succeeded
         if (result.insertedTexts?.length > 0) {
           customTextStorage.updateWithDbIds(result.insertedTexts);
+          setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh after ID update
         }
         if (result.success) {
           updateSyncServiceStatus('synced');
@@ -519,9 +528,16 @@ function App() {
   const handleTextAdded = useCallback(async (savedEntry) => {
     if (!isSupabaseConfigured || !user) return;
 
+    const userId = user.id;
     console.log('[Sync] New text added, syncing to cloud...');
     // Only sync the new entry, not all texts (avoids duplicates and improves perf)
-    const result = await syncCustomTextsToCloud([savedEntry], user.id);
+    const result = await syncCustomTextsToCloud([savedEntry], userId);
+
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] User changed during text add sync, aborting');
+      return;
+    }
 
     if (result.success && result.insertedTexts?.length > 0) {
       customTextStorage.updateWithDbIds(result.insertedTexts);
@@ -536,8 +552,15 @@ function App() {
   const handleTextDeleted = useCallback(async (textId) => {
     if (!isSupabaseConfigured || !user) return;
 
+    const userId = user.id;
     console.log('[Sync] Text deleted, syncing to cloud...');
-    const result = await deleteCustomTextFromCloud(textId, user.id);
+    const result = await deleteCustomTextFromCloud(textId, userId);
+
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] User changed during text delete sync, aborting');
+      return;
+    }
 
     if (!result.success) {
       console.error('[Sync] Failed to sync text deletion:', result.error);
@@ -550,8 +573,15 @@ function App() {
   const handleClearAllTexts = useCallback(async () => {
     if (!isSupabaseConfigured || !user) return;
 
+    const userId = user.id;
     console.log('[Sync] Clearing all texts, syncing to cloud...');
-    const result = await clearAllCustomTextsFromCloud(user.id);
+    const result = await clearAllCustomTextsFromCloud(userId);
+
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] User changed during clear all sync, aborting');
+      return;
+    }
 
     if (!result.success) {
       console.error('[Sync] Failed to sync clear all:', result.error);
@@ -640,6 +670,7 @@ function App() {
     // Update local IDs from pending processing (if any texts were inserted)
     if (pendingResult.insertedTexts?.length > 0) {
       customTextStorage.updateWithDbIds(pendingResult.insertedTexts);
+      setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh after ID update
     }
 
     // Handle skipped result (another sync in progress) - don't start concurrent sync
@@ -829,6 +860,12 @@ function App() {
 
     const result = await forceOverwriteRemoteWithLocal(userId, localSettings, localTexts);
 
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] Force overwrite: User changed during operation, aborting');
+      return;
+    }
+
     if (result.success) {
       console.log('[Sync] Force overwrite successful');
       setSyncError(null); // Clear any previous error
@@ -871,6 +908,12 @@ function App() {
     const userId = user.id;
 
     const result = await forceUseRemoteData(userId);
+
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] Force use remote: User changed during operation, aborting');
+      return;
+    }
 
     if (result.success) {
       console.log('[Sync] Force use remote successful');
