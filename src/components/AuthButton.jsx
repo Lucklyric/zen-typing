@@ -110,8 +110,11 @@ export default function AuthButton({
         <span>
           {theme === 'geek' ? '[!]' : theme === 'cyber' ? '⚠' : '⚠️'}
         </span>
-        <span className="hidden sm:inline max-w-[100px] truncate" title={authError || 'Auth error'}>
-          {theme === 'geek' ? 'ERROR' : theme === 'cyber' ? 'ERR' : 'Error'}
+        <span className="hidden sm:inline max-w-[120px] truncate" title={authError || 'Auth error'}>
+          {authError
+            ? (theme === 'geek' ? authError.toUpperCase().slice(0, 12) : authError.slice(0, 15))
+            : (theme === 'geek' ? 'ERROR' : theme === 'cyber' ? 'ERR' : 'Error')
+          }
         </span>
         <button
           onClick={handleCancel}

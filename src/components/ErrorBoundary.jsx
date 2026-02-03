@@ -40,7 +40,7 @@ class ErrorBoundary extends React.Component {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               An unexpected error occurred. Please try refreshing the page.
             </p>
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="text-left mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <summary className="text-sm text-red-700 dark:text-red-400 cursor-pointer font-medium">
                   Error Details

@@ -21,6 +21,8 @@ export default function SyncStatus({
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // 'overwrite' | 'useRemote'
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [actionError, setActionError] = useState(null);
   const menuRef = useRef(null);
   const confirmRef = useRef(null);
   const cancelRef = useRef(null);
@@ -40,15 +42,13 @@ export default function SyncStatus({
         setShowConfirm(false);
         setShowCancelDialog(false);
         setConfirmAction(null); // Reset confirm action to prevent stale state
+        setActionError(null); // Clear any previous error to prevent stale display
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showMenu, showConfirm, showCancelDialog]);
-
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [actionError, setActionError] = useState(null);
 
   const handleConfirmAction = async () => {
     // Prevent double-clicks during execution
