@@ -228,6 +228,15 @@ function App() {
           }
           console.log('[Sync] Loaded from cloud:', { settings: settingsResult, texts: textsResult });
 
+          // Check for cloud load errors - don't treat errors as empty data
+          if (settingsResult.error || textsResult.error) {
+            const errorMsg = settingsResult.error || textsResult.error || 'Failed to load cloud data';
+            console.error('[Sync] Cloud load failed:', errorMsg);
+            setSyncError(errorMsg);
+            updateSyncServiceStatus('error', errorMsg);
+            return;
+          }
+
           const cloudTexts = textsResult.texts || [];
           let migrationResult = null;
 
@@ -249,16 +258,14 @@ function App() {
             return;
           }
 
-          // Apply cloud settings to local
-          applyCloudSettings(settingsResult.settings);
-
-          // Apply cloud texts to local (replace local with cloud)
+          // Apply cloud texts to local BEFORE settings to avoid partial state
           if (cloudTexts.length > 0) {
             console.log('[Sync] Replacing local texts with cloud texts');
             const storageSuccess = customTextStorage.replaceAll(cloudTexts);
             if (!storageSuccess) {
               console.error('[Sync] Failed to save cloud texts locally');
               setSyncError('Failed to save data locally');
+              updateSyncServiceStatus('error', 'Failed to save data locally');
               return;
             }
             setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
@@ -266,6 +273,9 @@ function App() {
             customTextStorage.updateWithDbIds(migrationResult.insertedTexts);
             setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh
           }
+
+          // Apply cloud settings to local only after texts storage succeeded
+          applyCloudSettings(settingsResult.settings);
         } else if (hasLocalData) {
           // No cloud data but has local data - migrate local to cloud
           console.log('[Sync] No cloud data, migrating local data to cloud...');
@@ -623,6 +633,11 @@ function App() {
     // First try to process any pending changes
     const pendingResult = await processPendingChanges(user.id);
 
+    // Update local IDs from pending processing (if any texts were inserted)
+    if (pendingResult.insertedTexts?.length > 0) {
+      customTextStorage.updateWithDbIds(pendingResult.insertedTexts);
+    }
+
     // If pending succeeded or was skipped (no pending), do a full sync
     if (pendingResult.success || pendingResult.skipped) {
       // Get current local data
@@ -705,21 +720,39 @@ function App() {
     // Load settings from cloud and apply
     const cloudSettings = await loadSettingsFromCloud(userId);
     console.log('[Sync] Force sync cloud settings:', cloudSettings);
-    applyCloudSettings(cloudSettings.settings);
+
+    // Check for cloud settings load error
+    if (cloudSettings.error) {
+      console.error('[Sync] Force sync: Failed to load cloud settings:', cloudSettings.error);
+      setSyncError(cloudSettings.error);
+      return;
+    }
 
     // Load texts from cloud to ensure we have latest
     const cloudResult = await loadCustomTextsFromCloud(userId);
     console.log('[Sync] Force sync cloud texts:', cloudResult);
 
+    // Check for cloud texts load error
+    if (cloudResult.error) {
+      console.error('[Sync] Force sync: Failed to load cloud texts:', cloudResult.error);
+      setSyncError(cloudResult.error);
+      return;
+    }
+
+    // Apply texts BEFORE settings to avoid partial state
     if (cloudResult.texts && cloudResult.texts.length > 0) {
       const storageSuccess = customTextStorage.replaceAll(cloudResult.texts);
       if (!storageSuccess) {
         console.error('[Sync] Force sync: Failed to save cloud texts locally');
         setSyncError('Failed to save data locally');
+        updateSyncServiceStatus('error', 'Failed to save data locally');
         return;
       }
       setHistoryRefreshKey((k) => k + 1);
     }
+
+    // Apply settings only after texts storage succeeded
+    applyCloudSettings(cloudSettings.settings);
 
     // Clear pending changes only after successful force sync to prevent duplicates on reconnect
     clearPendingChanges();
