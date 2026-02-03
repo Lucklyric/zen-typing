@@ -503,6 +503,13 @@ function App() {
       const allSettings = settingsStorage.get();
       console.log('[Sync] Settings changed, syncing to cloud...');
       const result = await syncSettingsToCloud(allSettings, userId);
+
+      // Bail out if user changed during async operation
+      if (activeUserIdRef.current !== userId) {
+        console.log('[Sync] Settings sync: User changed during operation, aborting');
+        return;
+      }
+
       if (!result.success) {
         console.error('[Sync] Settings sync failed:', result.error);
       }
@@ -545,6 +552,8 @@ function App() {
       console.log('[Sync] New text synced successfully');
     } else if (!result.success) {
       console.error('[Sync] Failed to sync new text:', result.error);
+      setSyncError(result.error || 'Failed to sync new text');
+      updateSyncServiceStatus('error', result.error || 'Failed to sync new text');
     }
   }, [user]);
 
@@ -564,6 +573,8 @@ function App() {
 
     if (!result.success) {
       console.error('[Sync] Failed to sync text deletion:', result.error);
+      setSyncError(result.error || 'Failed to sync text deletion');
+      updateSyncServiceStatus('error', result.error || 'Failed to sync text deletion');
     } else {
       console.log('[Sync] Text deletion synced successfully');
     }
@@ -585,6 +596,8 @@ function App() {
 
     if (!result.success) {
       console.error('[Sync] Failed to sync clear all:', result.error);
+      setSyncError(result.error || 'Failed to sync clear all');
+      updateSyncServiceStatus('error', result.error || 'Failed to sync clear all');
     } else {
       console.log('[Sync] Clear all synced successfully');
     }
@@ -663,9 +676,16 @@ function App() {
 
     console.log('[Sync] Retry triggered by user');
     setSyncError(null); // Clear error state first
+    const userId = user.id;
 
     // First try to process any pending changes
-    const pendingResult = await processPendingChanges(user.id);
+    const pendingResult = await processPendingChanges(userId);
+
+    // Bail out if user changed during async operation
+    if (activeUserIdRef.current !== userId) {
+      console.log('[Sync] Retry: User changed during pending changes processing, aborting');
+      return;
+    }
 
     // Update local IDs from pending processing (if any texts were inserted)
     if (pendingResult.insertedTexts?.length > 0) {
@@ -771,6 +791,7 @@ function App() {
 
       if (syncResult.success && syncResult.insertedTexts?.length > 0) {
         customTextStorage.updateWithDbIds(syncResult.insertedTexts);
+        setHistoryRefreshKey((k) => k + 1); // Trigger UI refresh after ID update
       } else if (!syncResult.success) {
         console.error('[Sync] Force sync texts push failed, skipping pull');
         pushSucceeded = false;
