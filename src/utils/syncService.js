@@ -1235,12 +1235,21 @@ export async function checkCloudData(userId) {
       signal
     );
 
-    // Log any errors from the queries
-    if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
+    // Helper to check for real errors (exclude PGRST116 which just means "no rows")
+    const isRealError = (err) => err && err.code !== 'PGRST116';
+
+    // Log any real errors from the queries
+    if (isRealError(settingsResult.error)) {
       console.error('[Sync] checkCloudData settings query error:', settingsResult.error);
     }
-    if (textsResult.error) {
+    if (isRealError(textsResult.error)) {
       console.error('[Sync] checkCloudData texts query error:', textsResult.error);
+    }
+
+    // Return error if either query had a real error (not just "no rows")
+    if (isRealError(settingsResult.error) || isRealError(textsResult.error)) {
+      const errorMsg = settingsResult.error?.message || textsResult.error?.message || 'Query failed';
+      return { hasSettings: false, hasTexts: false, textsCount: 0, error: errorMsg };
     }
 
     return {

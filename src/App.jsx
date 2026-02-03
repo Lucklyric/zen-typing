@@ -156,12 +156,32 @@ function App() {
     const unsubscribe = onAuthStateChange(async (event, session) => {
       const newUserId = session?.user?.id || null;
       setUser(session?.user || null);
+
+      // Handle no-session events (sign out, user deleted, or initial load without user)
+      if (!session?.user) {
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          setAuthState('idle');
+          // Clear sync state BEFORE nullifying user ID to ensure user-scoped pending changes are cleared
+          resetSyncState();
+          activeUserIdRef.current = null;
+          setCurrentUserId(null);
+          // Clear user data from localStorage to prevent cross-account data leakage
+          customTextStorage.clearAll();
+          settingsStorage.clear();
+        } else {
+          // No session (e.g., INITIAL_SESSION without user) - just clear user tracking without wiping data
+          activeUserIdRef.current = null;
+          setCurrentUserId(null);
+        }
+        return;
+      }
+
       activeUserIdRef.current = newUserId;
       // Update sync service with current user ID for scoped storage
       setCurrentUserId(newUserId);
 
       // Trigger sync on SIGNED_IN (new sign-in) or INITIAL_SESSION (returning user)
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         setAuthState('idle');
 
         // Trigger migration/sync
@@ -175,6 +195,14 @@ function App() {
           return;
         }
         console.log('[Sync] Cloud data check:', cloudData);
+
+        // If cloud check failed (timeout, network error, etc.), skip migration to avoid data loss
+        if (cloudData.error) {
+          console.log('[Sync] Cloud data check failed, skipping migration:', cloudData.error);
+          setSyncError(cloudData.error);
+          updateSyncServiceStatus('error', cloudData.error);
+          return;
+        }
 
         const localTexts = customTextStorage.getAll();
         const hasStoredSettings = settingsStorage.hasStoredSettings();
@@ -248,15 +276,6 @@ function App() {
         } else {
           console.log('[Sync] No data to sync (no cloud data, no local data)');
         }
-      } else if (event === 'SIGNED_OUT') {
-        setAuthState('idle');
-        // Clear sync state BEFORE nullifying user ID to ensure user-scoped pending changes are cleared
-        resetSyncState();
-        activeUserIdRef.current = null;
-        setCurrentUserId(null);
-        // Clear user data from localStorage to prevent cross-account data leakage
-        customTextStorage.clearAll();
-        settingsStorage.clear();
       }
     });
 
@@ -728,8 +747,7 @@ function App() {
         } catch (storageErr) {
           console.error('[Sync] Force overwrite storage error:', storageErr);
           setSyncError('Failed to save data locally');
-          updateSyncServiceStatus('error', 'Failed to save data locally');
-          return; // Don't leave sync in success state
+          throw new Error('Failed to save data locally'); // Keep modal open with actionError
         }
       }
     } else {
@@ -768,8 +786,7 @@ function App() {
       } catch (storageErr) {
         console.error('[Sync] Force use remote storage error:', storageErr);
         setSyncError('Failed to save data locally');
-        updateSyncServiceStatus('error', 'Failed to save data locally');
-        return; // Don't leave sync in success state
+        throw new Error('Failed to save data locally'); // Keep modal open with actionError
       }
     } else {
       console.error('[Sync] Force use remote failed:', result.error);
