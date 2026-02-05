@@ -349,14 +349,17 @@ export async function processPendingChanges(userId) {
 
   isProcessingPending = true;
 
-  // Create abort controller for this batch operation
-  const abortController = createSyncAbortController();
-  const signal = abortController.signal;
-
-  // This is the parent operation, so we manage status
-  setSyncStatus('syncing');
+  let abortController;
+  let signal;
 
   try {
+    // Create abort controller for this batch operation
+    abortController = createSyncAbortController();
+    signal = abortController.signal;
+
+    // This is the parent operation, so we manage status
+    setSyncStatus('syncing');
+
     // Snapshot pending changes at start (new changes during processing stay in queue)
     const pending = [...syncState.pendingChanges];
     const errors = [];
@@ -442,7 +445,9 @@ export async function processPendingChanges(userId) {
     return { success: false, error: err.message || 'Unexpected error occurred' };
   } finally {
     isProcessingPending = false;
-    cleanupSyncAbortController(abortController);
+    if (abortController) {
+      cleanupSyncAbortController(abortController);
+    }
   }
 }
 
@@ -462,6 +467,8 @@ export function setOnReconnectCallback(callback) {
  * @returns {Function} Cleanup function
  */
 export function initNetworkListeners() {
+  let pendingReconnectTimeoutId = null;
+
   const handleOnline = () => {
     // Process pending changes whenever we come online and have pending work
     // Don't just check for 'offline' status - also process if we have queued changes
@@ -489,7 +496,8 @@ export function initNetworkListeners() {
     // App started online with persisted pending changes - trigger processing
     if (onReconnectCallback) {
       // Delay slightly to allow App to set up the callback
-      setTimeout(() => {
+      pendingReconnectTimeoutId = setTimeout(() => {
+        pendingReconnectTimeoutId = null;
         if (onReconnectCallback && isOnline() && syncState.pendingChanges.length > 0) {
           onReconnectCallback();
         }
@@ -498,6 +506,10 @@ export function initNetworkListeners() {
   }
 
   return () => {
+    if (pendingReconnectTimeoutId) {
+      clearTimeout(pendingReconnectTimeoutId);
+      pendingReconnectTimeoutId = null;
+    }
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
   };
@@ -1300,14 +1312,6 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     return { success: false, error: 'Cannot overwrite remote while offline' };
   }
 
-  // Verify userId matches authenticated session (security check)
-  const { data: { user: sessionUser } } = await supabase.auth.getUser();
-  if (!sessionUser || sessionUser.id !== userId) {
-    console.error('[Sync] forceOverwriteRemoteWithLocal: userId mismatch or no session');
-    setSyncStatus('error', 'Authentication required');
-    return { success: false, error: 'Authentication required' };
-  }
-
   // Mutex: Prevent concurrent force overwrite operations
   if (isForceOverwriting) {
     console.log('[Sync] forceOverwriteRemoteWithLocal: Already in progress, skipping');
@@ -1323,6 +1327,15 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
   const signal = abortController.signal;
 
   try {
+    // Refresh session close to the destructive operations to avoid TOCTOU issues
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    const sessionUser = refreshData?.user;
+    if (refreshError || !sessionUser || sessionUser.id !== userId) {
+      console.error('[Sync] forceOverwriteRemoteWithLocal: userId mismatch or no session', refreshError);
+      setSyncStatus('error', 'Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
     setSyncStatus('syncing');
     const errors = [];
 

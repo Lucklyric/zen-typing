@@ -8,6 +8,7 @@ class AudioManager {
     this.audioContext = null;
     this.enabled = true;
     this.volume = 0.3;
+    this.completionTimeouts = new Set();
     this.initAudioContext();
   }
 
@@ -137,28 +138,46 @@ class AudioManager {
 
     await this.resumeAudioContext();
 
+    const context = this.audioContext;
+    if (!context || context.state === 'closed') return;
+
     // Play a nice chord progression
     const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
     
     frequencies.forEach((freq, index) => {
-      setTimeout(() => {
-        const oscillator = this.audioContext.createOscillator();
-        const gainNode = this.audioContext.createGain();
+      const timeoutId = setTimeout(() => {
+        this.completionTimeouts.delete(timeoutId);
+
+        const activeContext = this.audioContext;
+        if (!this.enabled || !activeContext || activeContext.state === 'closed') return;
+
+        const oscillator = activeContext.createOscillator();
+        const gainNode = activeContext.createGain();
 
         oscillator.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
+        gainNode.connect(activeContext.destination);
 
-        oscillator.frequency.setValueAtTime(freq, this.audioContext.currentTime);
+        oscillator.frequency.setValueAtTime(freq, activeContext.currentTime);
         
-        gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-        gainNode.gain.linearRampToValueAtTime(this.volume * 0.4, this.audioContext.currentTime + 0.1);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.8);
+        gainNode.gain.setValueAtTime(0, activeContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(this.volume * 0.4, activeContext.currentTime + 0.1);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, activeContext.currentTime + 0.8);
 
         oscillator.type = 'sine';
-        oscillator.start(this.audioContext.currentTime);
-        oscillator.stop(this.audioContext.currentTime + 0.8);
+        oscillator.start(activeContext.currentTime);
+        oscillator.stop(activeContext.currentTime + 0.8);
       }, index * 100);
+      this.completionTimeouts.add(timeoutId);
     });
+  }
+
+  clearCompletionTimeouts() {
+    this.completionTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    this.completionTimeouts.clear();
+  }
+
+  cleanup() {
+    this.clearCompletionTimeouts();
   }
 
   setVolume(volume) {
@@ -167,6 +186,9 @@ class AudioManager {
 
   setEnabled(enabled) {
     this.enabled = enabled;
+    if (!enabled) {
+      this.cleanup();
+    }
   }
 
   isEnabled() {

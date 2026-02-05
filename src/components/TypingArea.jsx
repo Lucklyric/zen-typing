@@ -30,7 +30,7 @@ const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dicta
         .catch(err => console.error('Failed to load IPA dictionary:', err));
     }
     return () => { cancelled = true; };
-  }, [showIPA, getIpaFn]);
+  }, [showIPA]);
 
   // Auto-scroll to keep current word visible
   useEffect(() => {

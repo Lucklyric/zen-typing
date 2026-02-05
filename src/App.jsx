@@ -366,6 +366,10 @@ function App() {
     document.documentElement.classList.toggle('dark', isDark && theme !== 'geek' && theme !== 'cyber');
   }, [theme]);
 
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => !prev);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -445,7 +449,7 @@ function App() {
     // Use capture phase to ensure shortcuts have priority over component handlers
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [focusMode]); // focusMode needed for escape key handler
+  }, [focusMode, toggleSound]); // focusMode needed for escape key handler
 
   // Persist settings when they change
   useEffect(() => {
@@ -638,10 +642,6 @@ function App() {
 
   const cancelSectionChange = () => {
     setPendingSection(null);
-  };
-
-  const toggleSound = () => {
-    setSoundEnabled(prev => !prev);
   };
 
   // Auth handlers (Cloud Sync)
