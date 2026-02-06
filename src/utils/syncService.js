@@ -364,6 +364,7 @@ export async function processPendingChanges(userId) {
     const pending = [...syncState.pendingChanges];
     const errors = [];
     const failedChanges = [];
+    const attemptedChanges = new Set();
     const allInsertedTexts = [];
 
     // Process clearAll first to avoid conflicts with subsequent adds
@@ -374,12 +375,16 @@ export async function processPendingChanges(userId) {
     // Reorder: clearAll first, then deletes, then other operations
     const orderedPending = [...clearAllChanges, ...deleteChanges, ...otherChanges];
 
+    let wasCancelled = false;
+
     for (const change of orderedPending) {
-      // Check if cancelled before each operation
+      // Check if cancelled before each operation — break (not return) so merge logic runs
       if (signal.aborted) {
-        setSyncStatus('error', 'Sync cancelled');
-        return { success: false, error: 'Sync cancelled', cancelled: true, insertedTexts: allInsertedTexts };
+        wasCancelled = true;
+        break;
       }
+
+      attemptedChanges.add(change);
 
       try {
         if (change.type === 'settings') {
@@ -426,8 +431,17 @@ export async function processPendingChanges(userId) {
       }
     }
 
-    // Only keep failed changes in queue (successfully processed are removed)
-    updateSyncState({ pendingChanges: failedChanges });
+    // Preserve: failed + unattempted snapshot items (after break) + new during processing
+    const unprocessedChanges = orderedPending.filter(c => !attemptedChanges.has(c));
+    const processedSnapshot = new Set(pending);
+    const newDuringProcessing = syncState.pendingChanges.filter(c => !processedSnapshot.has(c));
+    updateSyncState({ pendingChanges: [...failedChanges, ...unprocessedChanges, ...newDuringProcessing] });
+
+    // Handle cancellation after queue is reconciled
+    if (wasCancelled) {
+      setSyncStatus('error', 'Sync cancelled');
+      return { success: false, error: 'Sync cancelled', cancelled: true, insertedTexts: allInsertedTexts };
+    }
 
     // Update sync status based on result
     if (errors.length > 0) {
@@ -494,15 +508,13 @@ export function initNetworkListeners() {
     setSyncStatus('offline');
   } else if (syncState.pendingChanges.length > 0) {
     // App started online with persisted pending changes - trigger processing
-    if (onReconnectCallback) {
-      // Delay slightly to allow App to set up the callback
-      pendingReconnectTimeoutId = setTimeout(() => {
-        pendingReconnectTimeoutId = null;
-        if (onReconnectCallback && isOnline() && syncState.pendingChanges.length > 0) {
-          onReconnectCallback();
-        }
-      }, 100);
-    }
+    // Delay to allow React effects to set up the reconnect callback via setOnReconnectCallback
+    pendingReconnectTimeoutId = setTimeout(() => {
+      pendingReconnectTimeoutId = null;
+      if (onReconnectCallback && isOnline() && syncState.pendingChanges.length > 0) {
+        onReconnectCallback();
+      }
+    }, 500);
   }
 
   return () => {
@@ -1130,8 +1142,12 @@ export async function clearAllCustomTextsFromCloud(userId) {
 
   if (!isOnline()) {
     console.log('[Sync] clearAllCustomTextsFromCloud: Offline, queuing for later');
+    // Purge prior text inserts, deletes, and duplicate clearAlls — clearAll supersedes them all
+    const filtered = syncState.pendingChanges.filter(
+      c => c.type !== 'texts' && c.type !== 'delete' && c.type !== 'clearAll'
+    );
     updateSyncState({
-      pendingChanges: [...syncState.pendingChanges, { type: 'clearAll', data: {} }],
+      pendingChanges: [...filtered, { type: 'clearAll', data: {} }],
     });
     return { success: true };
   }
