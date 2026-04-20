@@ -49,6 +49,7 @@ function App() {
     mode: 'normal'
   });
   const [showIPA, setShowIPA] = useState(() => settingsStorage.get('showIPA'));
+  const [showReference, setShowReference] = useState(() => settingsStorage.get('showReference'));
   const [soundEnabled, setSoundEnabled] = useState(() => settingsStorage.get('soundEnabled'));
   const [showHistory, setShowHistory] = useState(() => settingsStorage.get('showHistory'));
   const [dictationMode, setDictationMode] = useState(() => settingsStorage.get('dictationMode'));
@@ -114,6 +115,7 @@ function App() {
     });
     // Update React state for all settings
     if (settings.showIPA !== undefined) setShowIPA(settings.showIPA);
+    if (settings.showReference !== undefined) setShowReference(settings.showReference);
     if (settings.soundEnabled !== undefined) setSoundEnabled(settings.soundEnabled);
     if (settings.dictationMode !== undefined) setDictationMode(settings.dictationMode);
     if (settings.themePreference !== undefined) setThemePreference(settings.themePreference);
@@ -420,6 +422,13 @@ function App() {
           setDictationMode(prev => !prev);
           return;
         }
+        // Ctrl/Cmd + B: Toggle reference annotation (bilingual)
+        if (key === 'b') {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowReference(prev => !prev);
+          return;
+        }
         // Ctrl/Cmd + T: Toggle theme (cycle through light/dark/system/geek/cyber)
         if (key === 't') {
           e.preventDefault();
@@ -459,6 +468,10 @@ function App() {
   useEffect(() => {
     settingsStorage.set('showIPA', showIPA);
   }, [showIPA]);
+
+  useEffect(() => {
+    settingsStorage.set('showReference', showReference);
+  }, [showReference]);
 
   useEffect(() => {
     settingsStorage.set('soundEnabled', soundEnabled);
@@ -512,7 +525,7 @@ function App() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [user, themePreference, themeExplicitlySet, showIPA, soundEnabled, dictationMode, showHistory, activeSection, focusMode, centerAreaHeight]);
+  }, [user, themePreference, themeExplicitlySet, showIPA, showReference, soundEnabled, dictationMode, showHistory, activeSection, focusMode, centerAreaHeight]);
 
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
@@ -1150,6 +1163,65 @@ function App() {
                 </kbd>
               </button>
 
+              {/* Reference Toggle — visible only when the selected entry has a reference */}
+              {shouldShowReference && (
+                <>
+                  <button
+                    onClick={() => setShowReference(!showReference)}
+                    type="button"
+                    aria-pressed={showReference}
+                    aria-label="Toggle reference annotation"
+                    title="Toggle Reference Annotation"
+                    className={`flex lg:hidden items-center justify-center w-11 h-11 text-base transition-all ${
+                      theme === 'geek'
+                        ? `font-mono border ${
+                            showReference
+                              ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
+                              : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                          }`
+                        : `rounded-lg ${
+                            showReference
+                              ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          }`
+                    }`}
+                  >
+                    {theme === 'geek' ? (showReference ? '[译]' : '[原]') : (showReference ? '🀄' : '🚫')}
+                  </button>
+
+                  <button
+                    onClick={() => setShowReference(!showReference)}
+                    type="button"
+                    aria-pressed={showReference}
+                    aria-label="Toggle reference annotation"
+                    className={`hidden lg:flex items-center gap-2 px-4 py-2 min-w-[44px] min-h-[44px] text-sm font-medium transition-all ${
+                      theme === 'geek'
+                        ? `font-mono border ${
+                            showReference
+                              ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
+                              : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                          }`
+                        : `rounded-lg ${
+                            showReference
+                              ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          }`
+                    }`}
+                    title="Toggle Reference Annotation (Ctrl+B)"
+                  >
+                    <span>{theme === 'geek' ? (showReference ? '[译]' : '[原]') : (showReference ? '🀄' : '🚫')}</span>
+                    <span className="hidden xl:inline">Reference</span>
+                    <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                      theme === 'geek'
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-black/10 dark:bg-white/10'
+                    }`}>
+                      {theme === 'geek' ? 'CTRL+B' : '⌘B'}
+                    </kbd>
+                  </button>
+                </>
+              )}
+
               {/* Desktop: Theme Toggle - hidden on mobile, in settings menu */}
               <button
                 onClick={() => {
@@ -1319,7 +1391,7 @@ function App() {
                   <TypingArea
                     key={`${selectedEntry.text}-${shouldShowReference ? selectedEntry.referenceText : ''}`}
                     text={selectedEntry.text}
-                    referenceText={shouldShowReference ? selectedEntry.referenceText : ''}
+                    referenceText={shouldShowReference && showReference ? selectedEntry.referenceText : ''}
                     onComplete={handleComplete}
                     onProgressChange={handleProgressChange}
                     showIPA={showIPA}

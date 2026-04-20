@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   focusMode: false, // boolean - whether focus mode is active
   ipaDisplay: 'toggle', // 'toggle', 'hover', 'click', 'always' - future feature
   showIPA: false,
+  showReference: true,
   dictationMode: false,
   showHistory: true,
   fontSize: 'medium', // 'small', 'medium', 'large'

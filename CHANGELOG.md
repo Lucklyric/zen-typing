@@ -2,6 +2,15 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-04-20
+
+### Added
+- **Reference annotation toggle** (desktop + mobile-compact buttons in the header, and `Ctrl/Cmd+B` shortcut). Lets you hide the paired reference text while keeping the typing target unchanged — useful once you've internalized the source and want to practice without visual assistance. Persists in settings; only shown when the selected entry actually has a reference.
+- `showReference` setting (default `true`) in `settingsStorage`.
+
+### Changed
+- Alignment strategy now prefers **finer** strict match: if both paragraph and sentence strict pairings succeed, the one with more groups wins. Paragraph pairing is only used when sentence-strict fails (e.g. the NRS-style case from 0.6.1 where translation merges sentences within a paragraph). Fixes a 0.6.1 regression where single-paragraph multi-sentence inputs collapsed into one coarse block.
+
 ## [0.6.1] - 2026-04-20
 
 ### Added

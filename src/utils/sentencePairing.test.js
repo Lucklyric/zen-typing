@@ -135,15 +135,25 @@ describe('mergeAdjacentByLength', () => {
 });
 
 describe('buildAlignedGroups', () => {
-  it('prefers paragraph alignment when paragraph counts match', () => {
+  it('prefers finer sentence alignment when both paragraph and sentence strict match', () => {
     const ref = '你好。我是 W。\nA：我是 A。';
     const typ = "Hi. I'm W.\nA: I'm A.";
     const engineWords = ['Hi.', "I'm", 'W.', 'A:', "I'm", 'A.'];
     const groups = buildAlignedGroups(ref, typ, engineWords);
-    expect(groups).toHaveLength(2);
-    expect(groups[0].reference).toContain('W');
-    expect(groups[0].startIndex).toBe(0);
-    expect(groups[1].startIndex).toBe(3);
+    // Sentence-strict yields 3 groups; paragraph yields 2. Finer wins.
+    expect(groups).toHaveLength(3);
+  });
+
+  it('uses paragraph alignment when sentence-strict count differs but paragraphs match', () => {
+    // 5 paragraphs each; Chinese has 1 sentence per paragraph, English has
+    // 2 sentences in the last paragraph (sentence counts differ → sentence
+    // strict fails, paragraph strict succeeds).
+    const ref = 'A。\nB。\nC。\nD。\nE。';
+    const typ = 'A.\nB.\nC.\nD.\nE. F.';
+    const engineWords = ['A.', 'B.', 'C.', 'D.', 'E.', 'F.'];
+    const groups = buildAlignedGroups(ref, typ, engineWords);
+    expect(groups).toHaveLength(5);
+    expect(groups[4].words).toEqual(['E.', 'F.']);
   });
 
   it('falls back to exact sentence alignment when paragraph counts differ', () => {

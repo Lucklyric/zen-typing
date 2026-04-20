@@ -164,9 +164,15 @@ export function buildAlignedGroups(referenceText, typingText, engineWords) {
   }
 
   const paragraph = alignByParagraphs(referenceText, typingText, engineWords);
-  if (paragraph) return paragraph;
-
   const sentenceExact = alignBySentencesExact(referenceText, engineWords);
+
+  // When both strict strategies succeed, prefer whichever gives finer
+  // alignment (more groups). Paragraph wins only when sentence-strict fails
+  // — e.g. translation merges or splits sentences unevenly within paragraphs.
+  if (paragraph && sentenceExact) {
+    return sentenceExact.length >= paragraph.length ? sentenceExact : paragraph;
+  }
+  if (paragraph) return paragraph;
   if (sentenceExact) return sentenceExact;
 
   return alignBySentencesFuzzy(referenceText, engineWords);
