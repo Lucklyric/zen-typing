@@ -1186,7 +1186,7 @@ function App() {
                           }`
                     }`}
                   >
-                    {theme === 'geek' ? (showReference ? '[译]' : '[原]') : (showReference ? '🀄' : '🚫')}
+                    {theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}
                   </button>
 
                   <button
@@ -1209,7 +1209,7 @@ function App() {
                     }`}
                     title="Toggle Reference Annotation (Ctrl+B)"
                   >
-                    <span>{theme === 'geek' ? (showReference ? '[译]' : '[原]') : (showReference ? '🀄' : '🚫')}</span>
+                    <span>{theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}</span>
                     <span className="hidden xl:inline">Reference</span>
                     <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                       theme === 'geek'
