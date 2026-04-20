@@ -2,6 +2,11 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] - 2026-04-20
+
+### Fixed
+- **Header title overlapped the action buttons** on narrower desktop widths. The `flex items-center justify-between` layout had no wrap fallback, so when the geek-theme `> ZEN.TYPING` title plus seven action buttons exceeded the container, items bled into each other instead of relaxing. Added `flex-wrap` + `gap-y-2` so the button row drops below the title block when cramped; no overlap at 1280 / 1440 / 1536 / 1920.
+
 ## [0.6.4] - 2026-04-20
 
 ### Fixed

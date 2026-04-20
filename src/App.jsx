@@ -1013,9 +1013,9 @@ function App() {
           : 'bg-white/80 dark:bg-gray-900/80 border-gray-200 dark:border-gray-800'
       }`}>
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img 
+          <div className="flex flex-wrap items-center justify-between gap-y-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <img
                 src={`${import.meta.env.BASE_URL}favicon.png`}
                 alt="Zen Typing Logo" 
                 className={`w-10 h-10 ${theme === 'geek' ? 'filter brightness-0 invert hue-rotate-90' : theme === 'cyber' ? 'filter brightness-0 invert hue-rotate-180 drop-shadow-[0_0_5px_rgba(0,243,255,0.8)]' : ''}`}
