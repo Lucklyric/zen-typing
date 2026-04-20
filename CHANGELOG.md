@@ -2,6 +2,18 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-04-20
+
+### Added
+- **Three-tier reference alignment.** Reference Mode now tries each strategy in order until one succeeds:
+  1. **Paragraph pairing** (split on `\n`) — handles the common case where source and translation keep the same paragraph structure even when inner sentence counts differ (e.g. translation joins two English sentences into one Chinese sentence).
+  2. **Exact sentence pairing** (split on `。！？.!?`) — the 0.6.0 behaviour.
+  3. **Fuzzy sentence pairing** — greedy merge of adjacent sentences on the longer side by cumulative character-length ratio, so mismatched sentence counts still align instead of falling back to a flat layout.
+- `buildAlignedGroups(referenceText, typingText, engineWords)` public helper and `mergeAdjacentByLength` utility.
+
+### Fixed
+- Mixed CJK/English bilingual text with unequal sentence counts per paragraph no longer silently loses the reference annotation.
+
 ## [0.6.0] - 2026-04-19
 
 ### Added

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import WordDisplay from './WordDisplay';
 import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { audioManager } from '../utils/audioManager';
-import { splitSentences, groupWordsBySentence } from '../utils/sentencePairing';
+import { buildAlignedGroups } from '../utils/sentencePairing';
 
 const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, theme = 'normal' }) => {
   const [engine] = useState(() => new TypingEngine(text));
@@ -229,20 +229,10 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
 
   const words = engine.words;
 
-  const sentenceGroups = useMemo(() => {
-    if (!referenceText) return null;
-    const refs = splitSentences(referenceText);
-    const groups = groupWordsBySentence(words);
-    if (refs.length === 0 || groups.length === 0) return null;
-    if (refs.length !== groups.length) return null;
-
-    let wordOffset = 0;
-    return groups.map((groupWords, i) => {
-      const startIndex = wordOffset;
-      wordOffset += groupWords.length;
-      return { reference: refs[i], words: groupWords, startIndex };
-    });
-  }, [referenceText, words]);
+  const sentenceGroups = useMemo(
+    () => buildAlignedGroups(referenceText, text, words),
+    [referenceText, text, words]
+  );
 
   // Calculate progress using engine's typedText for accuracy
   // Guard against division by zero for empty text
