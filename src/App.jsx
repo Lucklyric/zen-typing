@@ -1064,7 +1064,7 @@ function App() {
                 }`}
                 title="Toggle IPA (Ctrl+I)"
               >
-                <span>{theme === 'geek' ? (showIPA ? '[+]' : '[ ]') : (showIPA ? '🔤' : '🔡')}</span>
+                <span>{theme === 'geek' ? (showIPA ? '[+]' : '[ ]') : (showIPA ? '🔤' : '🔡')}</span>
                 <span className="hidden lg:inline">{theme === 'geek' ? 'IPA' : 'IPA'}</span>
                 <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                   theme === 'geek'
@@ -1186,7 +1186,7 @@ function App() {
                           }`
                     }`}
                   >
-                    {theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}
+                    {theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}
                   </button>
 
                   <button
@@ -1209,7 +1209,7 @@ function App() {
                     }`}
                     title="Toggle Reference Annotation (Ctrl+B)"
                   >
-                    <span>{theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}</span>
+                    <span>{theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}</span>
                     <span className="hidden xl:inline">Reference</span>
                     <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                       theme === 'geek'

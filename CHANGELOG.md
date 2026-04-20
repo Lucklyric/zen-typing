@@ -2,6 +2,11 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] - 2026-04-20
+
+### Fixed
+- **Header icons wrapping to two lines** in the geek theme. The "off" icon `[ ]` used a regular space, which the browser treated as a line-break opportunity at tight widths — the opening and closing brackets rendered on separate lines, making IPA and Reference buttons double-height. Replaced the inner space with a non-breaking space so the bracket pair stays atomic.
+
 ## [0.6.3] - 2026-04-20
 
 ### Fixed
