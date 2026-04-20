@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import TypingArea from './components/TypingArea';
-import ReferenceWorkspace from './components/ReferenceWorkspace';
 import ResizableContainer from './components/ResizableContainer';
 import TextInput from './components/TextInput';
 import CustomTextHistory from './components/CustomTextHistory';
@@ -76,7 +75,6 @@ function App() {
   const [activeSection, setActiveSection] = useState(() => settingsStorage.get('activeSection'));
   
   // Reference Mode state
-  const [splitRatio, setSplitRatio] = useState(() => settingsStorage.get('splitRatio'));
   const [centerAreaHeight, setCenterAreaHeight] = useState(() => settingsStorage.get('centerAreaHeight'));
 
   // Settings menu state
@@ -122,7 +120,6 @@ function App() {
     if (settings.showHistory !== undefined) setShowHistory(settings.showHistory);
     if (settings.themeExplicitlySet !== undefined) setThemeExplicitlySet(settings.themeExplicitlySet);
     if (settings.activeSection !== undefined) setActiveSection(settings.activeSection);
-    if (settings.splitRatio !== undefined) setSplitRatio(settings.splitRatio);
     if (settings.centerAreaHeight !== undefined) setCenterAreaHeight(settings.centerAreaHeight);
     if (settings.focusMode !== undefined) setFocusMode(settings.focusMode);
   }, []);
@@ -484,11 +481,6 @@ function App() {
     settingsStorage.set('focusMode', focusMode);
   }, [focusMode]);
 
-  // Persist Reference Mode settings
-  useEffect(() => {
-    settingsStorage.set('splitRatio', splitRatio);
-  }, [splitRatio]);
-
   useEffect(() => {
     settingsStorage.set('centerAreaHeight', centerAreaHeight);
   }, [centerAreaHeight]);
@@ -520,7 +512,7 @@ function App() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [user, themePreference, themeExplicitlySet, showIPA, soundEnabled, dictationMode, showHistory, activeSection, focusMode, splitRatio, centerAreaHeight]);
+  }, [user, themePreference, themeExplicitlySet, showIPA, soundEnabled, dictationMode, showHistory, activeSection, focusMode, centerAreaHeight]);
 
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
@@ -1102,6 +1094,30 @@ function App() {
                 </kbd>
               </button>
 
+              {/* Mobile/tablet: compact Dictation toggle */}
+              <button
+                onClick={() => setDictationMode(!dictationMode)}
+                type="button"
+                aria-pressed={dictationMode}
+                aria-label="Toggle dictation mode"
+                title="Toggle Dictation Mode"
+                className={`flex lg:hidden items-center justify-center w-11 h-11 text-base transition-all ${
+                  theme === 'geek'
+                    ? `font-mono border ${
+                        dictationMode
+                          ? 'bg-green-900/50 border-green-400 text-green-400 shadow-lg shadow-green-400/20'
+                          : 'bg-black/50 border-green-500/30 text-green-400/70 hover:border-green-400 hover:text-green-400'
+                      }`
+                    : `rounded-lg ${
+                        dictationMode
+                          ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`
+                }`}
+              >
+                {theme === 'geek' ? (dictationMode ? '[●]' : '[○]') : (dictationMode ? '👁️' : '👁️‍🗨️')}
+              </button>
+
               {/* Desktop: Dictation Toggle - hidden on mobile, in settings menu */}
               <button
                 onClick={() => setDictationMode(!dictationMode)}
@@ -1291,49 +1307,26 @@ function App() {
                 minHeight={Math.min(300, Math.floor(windowHeight * 0.35))}
                 maxHeight={Math.floor(windowHeight * 0.6)}
               >
-                {shouldShowReference ? (
-                  <div className={`h-full rounded-2xl shadow-xl overflow-hidden ${
+                <div
+                  className={`h-full rounded-2xl shadow-xl overflow-hidden ${
                     theme === 'geek'
                       ? 'bg-black border border-green-500/30 shadow-green-500/20'
                       : theme === 'cyber'
                       ? 'bg-black/40 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,243,255,0.15)] backdrop-blur-sm'
                       : 'bg-white dark:bg-gray-800'
-                  }`}>
-                    <ReferenceWorkspace
-                      key={`${selectedEntry.text}-${selectedEntry.referenceText}`}
-                      referenceText={selectedEntry.referenceText}
-                      typingText={selectedEntry.text}
-                      onComplete={handleComplete}
-                      onProgressChange={handleProgressChange}
-                      showIPA={showIPA}
-                      dictationMode={dictationMode}
-                      theme={theme}
-                      splitRatio={splitRatio}
-                      onSplitRatioChange={setSplitRatio}
-                      height={centerAreaHeight - 64} // Subtract padding
-                    />
-                  </div>
-                ) : (
-                  <div 
-                    className={`h-full rounded-2xl shadow-xl overflow-hidden ${
-                      theme === 'geek'
-                        ? 'bg-black border border-green-500/30 shadow-green-500/20'
-                        : theme === 'cyber'
-                        ? 'bg-black/40 border border-cyan-500/30 shadow-[0_0_20px_rgba(0,243,255,0.15)] backdrop-blur-sm'
-                        : 'bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    <TypingArea
-                      key={selectedEntry.text}
-                      text={selectedEntry.text}
-                      onComplete={handleComplete}
-                      onProgressChange={handleProgressChange}
-                      showIPA={showIPA}
-                      dictationMode={dictationMode}
-                      theme={theme}
-                    />
-                  </div>
-                )}
+                  }`}
+                >
+                  <TypingArea
+                    key={`${selectedEntry.text}-${shouldShowReference ? selectedEntry.referenceText : ''}`}
+                    text={selectedEntry.text}
+                    referenceText={shouldShowReference ? selectedEntry.referenceText : ''}
+                    onComplete={handleComplete}
+                    onProgressChange={handleProgressChange}
+                    showIPA={showIPA}
+                    dictationMode={dictationMode}
+                    theme={theme}
+                  />
+                </div>
               </ResizableContainer>
             </div>
 

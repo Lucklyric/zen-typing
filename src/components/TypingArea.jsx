@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import WordDisplay from './WordDisplay';
 import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { audioManager } from '../utils/audioManager';
+import { splitSentences, groupWordsBySentence } from '../utils/sentencePairing';
 
-const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dictationMode = false, theme = 'normal' }) => {
+const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, theme = 'normal' }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -228,10 +229,53 @@ const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dicta
 
   const words = engine.words;
 
+  const sentenceGroups = useMemo(() => {
+    if (!referenceText) return null;
+    const refs = splitSentences(referenceText);
+    const groups = groupWordsBySentence(words);
+    if (refs.length === 0 || groups.length === 0) return null;
+    if (refs.length !== groups.length) return null;
+
+    let wordOffset = 0;
+    return groups.map((groupWords, i) => {
+      const startIndex = wordOffset;
+      wordOffset += groupWords.length;
+      return { reference: refs[i], words: groupWords, startIndex };
+    });
+  }, [referenceText, words]);
+
   // Calculate progress using engine's typedText for accuracy
   // Guard against division by zero for empty text
   const totalChars = Math.max(words.join(' ').length, 1);
   const progress = (engine.typedText.length / totalChars) * 100;
+
+  const renderWord = (word, wordIndex) => (
+    <div
+      key={wordIndex}
+      data-word-index={wordIndex}
+      className={shakeWord === wordIndex ? 'animate-shake' : ''}
+    >
+      <WordDisplay
+        word={word}
+        ipa={showIPA && getIpaFn ? getIpaFn(word) : null}
+        currentCharIndex={wordIndex === currentWordIndex ? currentCharIndex : 0}
+        isCurrentWord={wordIndex === currentWordIndex}
+        isCompleted={wordIndex < currentWordIndex}
+        typedChars={wordTypedChars[wordIndex] || ''}
+        errors={wordErrors[wordIndex] || []}
+        showIPA={showIPA}
+        dictationMode={dictationMode}
+        theme={theme}
+        showSpace={wordIndex < words.length - 1}
+      />
+    </div>
+  );
+
+  const annotationClasses = theme === 'geek'
+    ? 'text-green-400/70 font-mono'
+    : theme === 'cyber'
+    ? 'text-cyan-400/70 font-mono'
+    : 'text-gray-500 dark:text-gray-400 font-serif';
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -422,31 +466,30 @@ const TypingArea = ({ text, onComplete, onProgressChange, showIPA = false, dicta
                   theme === 'geek' ? 'custom-scrollbar-geek' : theme === 'cyber' ? 'custom-scrollbar-cyber' : 'custom-scrollbar'
                 }`}
               >
-                <div className={`flex flex-wrap leading-loose tracking-wide items-start text-xl md:text-2xl lg:text-3xl ${
-                  theme === 'geek' ? 'font-mono' : 'font-mono'
-                }`}>
-                  {words.map((word, wordIndex) => (
-                    <div
-                      key={wordIndex}
-                      data-word-index={wordIndex}
-                      className={shakeWord === wordIndex ? 'animate-shake' : ''}
-                    >
-                      <WordDisplay
-                        word={word}
-                        ipa={showIPA && getIpaFn ? getIpaFn(word) : null}
-                        currentCharIndex={wordIndex === currentWordIndex ? currentCharIndex : 0}
-                        isCurrentWord={wordIndex === currentWordIndex}
-                        isCompleted={wordIndex < currentWordIndex}
-                        typedChars={wordTypedChars[wordIndex] || ''}
-                        errors={wordErrors[wordIndex] || []}
-                        showIPA={showIPA}
-                        dictationMode={dictationMode}
-                        theme={theme}
-                        showSpace={wordIndex < words.length - 1} // Show space for all words except the last
-                      />
-                    </div>
-                  ))}
-                </div>
+                {sentenceGroups ? (
+                  <div className="flex flex-col gap-5 md:gap-6 text-left">
+                    {sentenceGroups.map((group, groupIndex) => (
+                      <div key={groupIndex} className="flex flex-col gap-1">
+                        <span className={`text-sm md:text-base leading-snug ${annotationClasses}`}>
+                          {group.reference}
+                        </span>
+                        <div className={`flex flex-wrap leading-loose tracking-wide items-start text-xl md:text-2xl lg:text-3xl ${
+                          theme === 'geek' ? 'font-mono' : 'font-mono'
+                        }`}>
+                          {group.words.map((word, i) =>
+                            renderWord(word, group.startIndex + i)
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`flex flex-wrap leading-loose tracking-wide items-start text-xl md:text-2xl lg:text-3xl ${
+                    theme === 'geek' ? 'font-mono' : 'font-mono'
+                  }`}>
+                    {words.map((word, wordIndex) => renderWord(word, wordIndex))}
+                  </div>
+                )}
               </div>
               
               {/* Mobile-friendly typing hint */}

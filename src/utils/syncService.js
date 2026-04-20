@@ -6,6 +6,13 @@
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
+export const SYNC_STATUS = Object.freeze({
+  SYNCED: 'synced',
+  SYNCING: 'syncing',
+  OFFLINE: 'offline',
+  ERROR: 'error',
+});
+
 /**
  * Sync status type
  * @typedef {'synced' | 'syncing' | 'offline' | 'error'} SyncStatus
@@ -229,15 +236,15 @@ function handleSyncError(err, context, dataKey = null) {
   const base = dataKey ? { [dataKey]: null } : { success: false };
 
   if (err.name === 'AbortError') {
-    setSyncStatus('error', 'Sync cancelled');
+    setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
     return { ...base, error: 'Sync cancelled', cancelled: true };
   }
   if (err.name === 'TimeoutError') {
-    setSyncStatus('error', 'Sync timed out');
+    setSyncStatus(SYNC_STATUS.ERROR, 'Sync timed out');
     return { ...base, error: 'Sync timed out', timeout: true };
   }
 
-  setSyncStatus('error', err.message);
+  setSyncStatus(SYNC_STATUS.ERROR, err.message);
   return { ...base, error: err.message };
 }
 
@@ -286,13 +293,13 @@ function updateSyncState(updates) {
  * @param {string} [error] - Error message if status is 'error'
  */
 export function setSyncStatus(status, error = null) {
-  if (status === 'syncing') {
+  if (status === SYNC_STATUS.SYNCING) {
     activeSyncCount++;
     // Only update status if not already syncing (prevent flicker)
     if (syncState.status !== 'syncing') {
       updateSyncState({ status: 'syncing', error: null });
     }
-  } else if (status === 'synced') {
+  } else if (status === SYNC_STATUS.SYNCED) {
     activeSyncCount = Math.max(0, activeSyncCount - 1);
     // Only set synced if all operations complete
     if (activeSyncCount === 0) {
@@ -302,7 +309,7 @@ export function setSyncStatus(status, error = null) {
         lastSyncAt: new Date(),
       });
     }
-  } else if (status === 'error') {
+  } else if (status === SYNC_STATUS.ERROR) {
     activeSyncCount = Math.max(0, activeSyncCount - 1);
     // Errors are always important to show
     updateSyncState({
@@ -313,7 +320,7 @@ export function setSyncStatus(status, error = null) {
     // 'offline' or other statuses - direct update
     updateSyncState({
       status,
-      error: status === 'error' ? error : null,
+      error: status === SYNC_STATUS.ERROR ? error : null,
     });
   }
 }
@@ -358,7 +365,7 @@ export async function processPendingChanges(userId) {
     signal = abortController.signal;
 
     // This is the parent operation, so we manage status
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
 
     // Snapshot pending changes at start (new changes during processing stay in queue)
     const pending = [...syncState.pendingChanges];
@@ -439,23 +446,23 @@ export async function processPendingChanges(userId) {
 
     // Handle cancellation after queue is reconciled
     if (wasCancelled) {
-      setSyncStatus('error', 'Sync cancelled');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
       return { success: false, error: 'Sync cancelled', cancelled: true, insertedTexts: allInsertedTexts };
     }
 
     // Update sync status based on result
     if (errors.length > 0) {
-      setSyncStatus('error', errors.join('; '));
+      setSyncStatus(SYNC_STATUS.ERROR, errors.join('; '));
       return { success: false, error: errors.join('; '), insertedTexts: allInsertedTexts };
     }
 
     // Successfully processed all pending changes
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true, insertedTexts: allInsertedTexts };
   } catch (err) {
     // Handle unhandled exceptions and ensure counter is decremented
     console.error('[Sync] processPendingChanges unhandled exception:', err);
-    setSyncStatus('error', err.message || 'Unexpected error occurred');
+    setSyncStatus(SYNC_STATUS.ERROR, err.message || 'Unexpected error occurred');
     return { success: false, error: err.message || 'Unexpected error occurred' };
   } finally {
     isProcessingPending = false;
@@ -486,18 +493,18 @@ export function initNetworkListeners() {
   const handleOnline = () => {
     // Process pending changes whenever we come online and have pending work
     // Don't just check for 'offline' status - also process if we have queued changes
-    if (syncState.status === 'offline' || syncState.pendingChanges.length > 0) {
+    if (syncState.status === SYNC_STATUS.OFFLINE || syncState.pendingChanges.length > 0) {
       // Notify App to process pending changes with user context
       if (onReconnectCallback) {
         onReconnectCallback();
-      } else if (syncState.status === 'offline') {
-        setSyncStatus('synced');
+      } else if (syncState.status === SYNC_STATUS.OFFLINE) {
+        setSyncStatus(SYNC_STATUS.SYNCED);
       }
     }
   };
 
   const handleOffline = () => {
-    setSyncStatus('offline');
+    setSyncStatus(SYNC_STATUS.OFFLINE);
   };
 
   window.addEventListener('online', handleOnline);
@@ -505,7 +512,7 @@ export function initNetworkListeners() {
 
   // Set initial status based on network
   if (!isOnline()) {
-    setSyncStatus('offline');
+    setSyncStatus(SYNC_STATUS.OFFLINE);
   } else if (syncState.pendingChanges.length > 0) {
     // App started online with persisted pending changes - trigger processing
     // Delay to allow React effects to set up the reconnect callback via setOnReconnectCallback
@@ -604,7 +611,7 @@ export async function syncSettingsToCloud(settings, userId, parentSignal = null)
   const manageStatus = !parentSignal;
 
   try {
-    if (manageStatus) setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCING);
 
     const { error } = await withTimeout(
       supabase
@@ -621,12 +628,12 @@ export async function syncSettingsToCloud(settings, userId, parentSignal = null)
 
     if (error) {
       console.error('[Sync] syncSettingsToCloud error:', error);
-      if (manageStatus) setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus(SYNC_STATUS.ERROR, error.message);
       return { success: false, error: error.message };
     }
 
     console.log('[Sync] syncSettingsToCloud: Success');
-    if (manageStatus) setSyncStatus('synced');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true };
   } catch (err) {
     // handleSyncError always sets status, so only call it when managing status
@@ -670,7 +677,7 @@ export async function loadSettingsFromCloud(userId, parentSignal = null) {
   const manageStatus = !parentSignal;
 
   try {
-    if (manageStatus) setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCING);
 
     const { data, error } = await withTimeout(
       supabase
@@ -684,12 +691,12 @@ export async function loadSettingsFromCloud(userId, parentSignal = null) {
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows returned (not an error for new users)
       console.error('[Sync] loadSettingsFromCloud error:', error);
-      if (manageStatus) setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus(SYNC_STATUS.ERROR, error.message);
       return { settings: null, error: error.message };
     }
 
     console.log('[Sync] loadSettingsFromCloud: Got settings:', data?.settings ? 'yes' : 'none');
-    if (manageStatus) setSyncStatus('synced');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCED);
     return { settings: data?.settings || null };
   } catch (err) {
     // handleSyncError always sets status, so only call it when managing status
@@ -747,7 +754,7 @@ export async function syncCustomTextsToCloud(texts, userId, parentSignal = null)
   const manageStatus = !parentSignal;
 
   try {
-    if (manageStatus) setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCING);
 
     // Validate and transform texts to match database schema
     const validTexts = texts.filter((t) => {
@@ -865,11 +872,11 @@ export async function syncCustomTextsToCloud(texts, userId, parentSignal = null)
     }
 
     if (errors.length > 0) {
-      if (manageStatus) setSyncStatus('error', errors.join('; '));
+      if (manageStatus) setSyncStatus(SYNC_STATUS.ERROR, errors.join('; '));
       return { success: false, error: errors.join('; ') };
     }
 
-    if (manageStatus) setSyncStatus('synced');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCED);
 
     // Return inserted texts so caller can update local storage with DB IDs
     return { success: true, insertedTexts };
@@ -915,7 +922,7 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
   const manageStatus = !parentSignal;
 
   try {
-    if (manageStatus) setSyncStatus('syncing');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCING);
 
     const { data, error } = await withTimeout(
       supabase
@@ -928,7 +935,7 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
 
     if (error) {
       console.error('[Sync] loadCustomTextsFromCloud error:', error);
-      if (manageStatus) setSyncStatus('error', error.message);
+      if (manageStatus) setSyncStatus(SYNC_STATUS.ERROR, error.message);
       return { texts: null, error: error.message };
     }
 
@@ -945,7 +952,7 @@ export async function loadCustomTextsFromCloud(userId, parentSignal = null) {
       updatedAt: t.updated_at,
     }));
 
-    if (manageStatus) setSyncStatus('synced');
+    if (manageStatus) setSyncStatus(SYNC_STATUS.SYNCED);
     return { texts };
   } catch (err) {
     // handleSyncError always sets status, so only call it when managing status
@@ -1102,7 +1109,7 @@ export async function deleteCustomTextFromCloud(textId, userId) {
   const signal = abortController.signal;
 
   try {
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
 
     const { error } = await withTimeout(
       supabase
@@ -1115,12 +1122,12 @@ export async function deleteCustomTextFromCloud(textId, userId) {
 
     if (error) {
       console.error('[Sync] deleteCustomTextFromCloud error:', error);
-      setSyncStatus('error', error.message);
+      setSyncStatus(SYNC_STATUS.ERROR, error.message);
       return { success: false, error: error.message };
     }
 
     console.log('[Sync] deleteCustomTextFromCloud: Success');
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true };
   } catch (err) {
     return handleSyncError(err, 'deleteCustomTextFromCloud');
@@ -1159,7 +1166,7 @@ export async function clearAllCustomTextsFromCloud(userId) {
   const signal = abortController.signal;
 
   try {
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
 
     const { error } = await withTimeout(
       supabase
@@ -1171,12 +1178,12 @@ export async function clearAllCustomTextsFromCloud(userId) {
 
     if (error) {
       console.error('[Sync] clearAllCustomTextsFromCloud error:', error);
-      setSyncStatus('error', error.message);
+      setSyncStatus(SYNC_STATUS.ERROR, error.message);
       return { success: false, error: error.message };
     }
 
     console.log('[Sync] clearAllCustomTextsFromCloud: Success');
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true };
   } catch (err) {
     return handleSyncError(err, 'clearAllCustomTextsFromCloud');
@@ -1202,7 +1209,7 @@ export async function migrateLocalToCloud(userId, localSettings, localTexts) {
   }
 
   try {
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
     const errors = [];
     let insertedTexts = [];
 
@@ -1226,14 +1233,14 @@ export async function migrateLocalToCloud(userId, localSettings, localTexts) {
 
     if (errors.length > 0) {
       const errorMsg = errors.join('; ');
-      setSyncStatus('error', errorMsg);
+      setSyncStatus(SYNC_STATUS.ERROR, errorMsg);
       return { success: false, error: errorMsg };
     }
 
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true, insertedTexts };
   } catch (err) {
-    setSyncStatus('error', err.message);
+    setSyncStatus(SYNC_STATUS.ERROR, err.message);
     return { success: false, error: err.message };
   }
 }
@@ -1319,12 +1326,12 @@ export function clearLocalCache() {
  */
 export async function forceOverwriteRemoteWithLocal(userId, localSettings, localTexts) {
   if (!isSupabaseConfigured || !supabase) {
-    setSyncStatus('error', 'Supabase not configured');
+    setSyncStatus(SYNC_STATUS.ERROR, 'Supabase not configured');
     return { success: false, error: 'Supabase not configured' };
   }
 
   if (!isOnline()) {
-    setSyncStatus('offline');
+    setSyncStatus(SYNC_STATUS.OFFLINE);
     return { success: false, error: 'Cannot overwrite remote while offline' };
   }
 
@@ -1348,11 +1355,11 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     const sessionUser = refreshData?.user;
     if (refreshError || !sessionUser || sessionUser.id !== userId) {
       console.error('[Sync] forceOverwriteRemoteWithLocal: userId mismatch or no session', refreshError);
-      setSyncStatus('error', 'Authentication required');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Authentication required');
       return { success: false, error: 'Authentication required' };
     }
 
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
     const errors = [];
 
     // Step 1: Delete ALL remote data
@@ -1372,7 +1379,7 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
 
     // Check if cancelled before next operation
     if (signal.aborted) {
-      setSyncStatus('error', 'Sync cancelled');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
       return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
@@ -1393,13 +1400,13 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     // If deletion failed or cancelled, abort
     if (errors.length > 0) {
       const errorMsg = errors.join('; ');
-      setSyncStatus('error', errorMsg);
+      setSyncStatus(SYNC_STATUS.ERROR, errorMsg);
       return { success: false, error: errorMsg };
     }
 
     // Check if cancelled before push
     if (signal.aborted) {
-      setSyncStatus('error', 'Sync cancelled');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
       return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
@@ -1429,7 +1436,7 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
 
     // Check if cancelled before texts push
     if (signal.aborted) {
-      setSyncStatus('error', 'Sync cancelled');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
       return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
@@ -1496,7 +1503,7 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
 
     if (errors.length > 0) {
       const errorMsg = errors.join('; ');
-      setSyncStatus('error', errorMsg);
+      setSyncStatus(SYNC_STATUS.ERROR, errorMsg);
       return { success: false, error: errorMsg, insertedTexts };
     }
 
@@ -1504,7 +1511,7 @@ export async function forceOverwriteRemoteWithLocal(userId, localSettings, local
     clearPendingChanges();
 
     console.log('[Sync] forceOverwriteRemoteWithLocal: Complete');
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return { success: true, insertedTexts };
   } catch (err) {
     return handleSyncError(err, 'forceOverwriteRemoteWithLocal');
@@ -1543,37 +1550,31 @@ export async function forceUseRemoteData(userId) {
   const signal = abortController.signal;
 
   try {
-    setSyncStatus('syncing');
+    setSyncStatus(SYNC_STATUS.SYNCING);
 
-    // Load settings from cloud (pass signal for proper cancellation)
-    console.log('[Sync] forceUseRemoteData: Loading settings from cloud');
-    const settingsResult = await loadSettingsFromCloud(userId, signal);
+    console.log('[Sync] forceUseRemoteData: Loading settings and texts from cloud');
+    const [settingsResult, textsResult] = await Promise.all([
+      loadSettingsFromCloud(userId, signal),
+      loadCustomTextsFromCloud(userId, signal),
+    ]);
 
-    // Check for cancellation
     if (signal.aborted) {
-      setSyncStatus('error', 'Sync cancelled');
+      setSyncStatus(SYNC_STATUS.ERROR, 'Sync cancelled');
       return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
     if (settingsResult.error && !settingsResult.settings) {
       console.error('[Sync] forceUseRemoteData: Failed to load settings:', settingsResult.error);
-      setSyncStatus('error', settingsResult.error);
+      if (textsResult.error) {
+        console.error('[Sync] forceUseRemoteData: Texts load also failed:', textsResult.error);
+      }
+      setSyncStatus(SYNC_STATUS.ERROR, settingsResult.error);
       return { success: false, error: settingsResult.error };
-    }
-
-    // Load texts from cloud (pass signal for proper cancellation)
-    console.log('[Sync] forceUseRemoteData: Loading texts from cloud');
-    const textsResult = await loadCustomTextsFromCloud(userId, signal);
-
-    // Check for cancellation
-    if (signal.aborted) {
-      setSyncStatus('error', 'Sync cancelled');
-      return { success: false, error: 'Sync cancelled', cancelled: true };
     }
 
     if (textsResult.error && !textsResult.texts) {
       console.error('[Sync] forceUseRemoteData: Failed to load texts:', textsResult.error);
-      setSyncStatus('error', textsResult.error);
+      setSyncStatus(SYNC_STATUS.ERROR, textsResult.error);
       return { success: false, error: textsResult.error };
     }
 
@@ -1581,7 +1582,7 @@ export async function forceUseRemoteData(userId) {
     clearPendingChanges();
 
     console.log('[Sync] forceUseRemoteData: Complete');
-    setSyncStatus('synced');
+    setSyncStatus(SYNC_STATUS.SYNCED);
     return {
       success: true,
       settings: settingsResult.settings || null,

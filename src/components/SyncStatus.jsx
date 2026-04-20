@@ -27,12 +27,10 @@ export default function SyncStatus({
   const confirmRef = useRef(null);
   const cancelRef = useRef(null);
 
-  // Close menu when clicking outside
   useEffect(() => {
     if (!showMenu && !showConfirm && !showCancelDialog) return;
 
     const handleClickOutside = (e) => {
-      // Check if click is outside all dialogs
       const isOutsideMenu = menuRef.current && !menuRef.current.contains(e.target);
       const isOutsideConfirm = !confirmRef.current || !confirmRef.current.contains(e.target);
       const isOutsideCancel = !cancelRef.current || !cancelRef.current.contains(e.target);
@@ -41,8 +39,8 @@ export default function SyncStatus({
         setShowMenu(false);
         setShowConfirm(false);
         setShowCancelDialog(false);
-        setConfirmAction(null); // Reset confirm action to prevent stale state
-        setActionError(null); // Clear any previous error to prevent stale display
+        setConfirmAction(null);
+        setActionError(null);
       }
     };
 
@@ -51,24 +49,21 @@ export default function SyncStatus({
   }, [showMenu, showConfirm, showCancelDialog]);
 
   const handleConfirmAction = async () => {
-    // Prevent double-clicks during execution
     if (isExecuting) return;
 
     setIsExecuting(true);
     setActionError(null);
     setShowMenu(false);
-    // Keep confirmation dialog open during execution to show "Working..." state
 
     const action = confirmAction === 'useRemote' ? onForceUseRemote : onForceOverwrite;
     if (action) {
       try {
         await action();
-        // Success - close the dialog
         setIsExecuting(false);
         setShowConfirm(false);
         setConfirmAction(null);
       } catch (error) {
-        // Error - keep dialog open and show error
+        // Keep dialog open on error so user can see the message and retry.
         setIsExecuting(false);
         setActionError(error.message || 'Operation failed');
       }

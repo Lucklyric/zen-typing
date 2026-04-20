@@ -12,38 +12,44 @@
   /* Custom scrollbar styles */
   .custom-scrollbar {
     scrollbar-width: thin;
+    scrollbar-color: #9ca3af transparent;
   }
-  
+
+  .dark .custom-scrollbar {
+    scrollbar-color: #4b5563 transparent;
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
     @apply bg-gray-100 dark:bg-gray-800 rounded;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-gray-400 dark:bg-gray-600 rounded hover:bg-gray-500 dark:hover:bg-gray-500;
   }
-  
+
   /* Geek theme scrollbar */
   .custom-scrollbar-geek {
-    /* Ensure consistent thin scrollbar in Firefox and others */
     scrollbar-width: thin;
+    /* Modern browsers honor scrollbar-color over ::-webkit pseudos once scrollbar-width is set. */
+    scrollbar-color: rgba(34, 197, 94, 0.6) rgba(20, 83, 45, 0.3);
   }
-  
+
   .custom-scrollbar-geek::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   .custom-scrollbar-geek::-webkit-scrollbar-track {
     @apply bg-green-900/20 rounded;
   }
-  
+
   .custom-scrollbar-geek::-webkit-scrollbar-thumb {
-    @apply bg-green-500/50 rounded hover:bg-green-400/70;
+    @apply bg-green-500/60 rounded hover:bg-green-400/80;
   }
   
   /* Smooth animations */
