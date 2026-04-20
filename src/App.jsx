@@ -1066,7 +1066,7 @@ function App() {
               >
                 <span>{theme === 'geek' ? (showIPA ? '[+]' : '[ ]') : (showIPA ? '🔤' : '🔡')}</span>
                 <span className="hidden lg:inline">{theme === 'geek' ? 'IPA' : 'IPA'}</span>
-                <kbd className={`hidden lg:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                   theme === 'geek'
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
@@ -1098,7 +1098,7 @@ function App() {
               >
                 <span>{theme === 'geek' ? (soundEnabled ? '[♪]' : '[x]') : (soundEnabled ? '🔊' : '🔇')}</span>
                 <span className="hidden lg:inline">Sound</span>
-                <kbd className={`hidden lg:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                   theme === 'geek'
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
@@ -1154,7 +1154,7 @@ function App() {
               >
                 <span>{theme === 'geek' ? (dictationMode ? '[●]' : '[○]') : (dictationMode ? '👁️' : '👁️‍🗨️')}</span>
                 <span className="hidden xl:inline">Dictation</span>
-                <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                   theme === 'geek'
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-black/10 dark:bg-white/10'
@@ -1211,7 +1211,7 @@ function App() {
                   >
                     <span>{theme === 'geek' ? (showReference ? '[R]' : '[ ]') : (showReference ? '📖' : '📕')}</span>
                     <span className="hidden xl:inline">Reference</span>
-                    <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                    <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                       theme === 'geek'
                         ? 'bg-green-500/20 text-green-400'
                         : 'bg-black/10 dark:bg-white/10'
@@ -1251,7 +1251,7 @@ function App() {
               >
                 <span>{theme === 'geek' ? '[T]' : theme === 'cyber' ? '<T>' : theme === 'dark' ? '🌙' : '☀️'}</span>
                 <span className="hidden xl:inline">{theme === 'geek' ? 'GEEK' : theme === 'cyber' ? 'CYBER' : theme === 'dark' ? 'Dark' : 'Light'}</span>
-                <kbd className={`hidden xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
+                <kbd className={`hidden 2xl:inline-block ml-1 px-1.5 py-0.5 text-xs rounded ${
                   theme === 'geek'
                     ? 'bg-green-500/20 text-green-400'
                     : theme === 'cyber'

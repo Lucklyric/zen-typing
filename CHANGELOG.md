@@ -2,6 +2,12 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-04-20
+
+### Fixed
+- **Header overflow at 1280–1440px in geek theme.** The wide `ZEN.TYPING` title plus six action buttons (IPA / Sound / Dictation / Reference / Theme / Sign In) with inline `CTRL+X` badges overflowed past the viewport on laptop widths, overlapping the title on the left and cutting off the settings gear on the right. Kbd badges are now `2xl:inline-block` (shown at ≥1536px), which is enough width to accommodate them without overlap.
+- **Reference toggle icon is language-neutral.** Swapped the Chinese characters (`[原]`/`[译]`, `🀄`) for `📖`/`📕` (normal/cyber themes) and `[R]`/`[ ]` (geek), since reference mode isn't limited to Chinese text.
+
 ## [0.6.2] - 2026-04-20
 
 ### Added
