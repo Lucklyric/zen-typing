@@ -185,8 +185,13 @@ const WordDisplay = ({
     const spaceTyped = typedChars.length > word.length;
     const hasSpaceError = errors.some(err => err.charIndex === word.length) || spaceError;
     
-    // Get what was actually typed for the space position
-    const typedSpaceChar = typedChars.length > word.length ? typedChars[word.length] : '';
+    // Get what was actually typed for the space position. If word-mode added
+    // overflow chars before the user's space, the slot at `word.length` holds
+    // the overflow char, not the space — fall back to the trailing space if
+    // one exists so adjacent words don't visually merge in char-mode.
+    const typedSpaceChar = typedChars.length > word.length
+      ? (typedChars.endsWith(' ') ? ' ' : typedChars[word.length])
+      : '';
     const isSpaceCharCorrect = typedSpaceChar === ' ';
     
     let textColor, bgColor = '';
