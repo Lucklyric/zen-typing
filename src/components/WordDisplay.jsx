@@ -1,19 +1,27 @@
 import React from 'react';
 
-const WordDisplay = ({ 
-  word, 
-  ipa, 
-  currentCharIndex, 
-  isCurrentWord, 
+const WordDisplay = ({
+  word,
+  ipa,
+  currentCharIndex,
+  isCurrentWord,
   isCompleted,
   typedChars,
   errors,
   showIPA,
   dictationMode = false,
+  dictationStyle = 'char',
   theme = 'normal',
   showSpace = false,
   spaceError = false
 }) => {
+  // Word-mode = sub-style of dictation that gives whole-word feedback only
+  const wordMode = dictationMode && dictationStyle === 'word';
+  // In word-mode, a completed word is "wrong" if any char in it had an error
+  // (errors at charIndex < word.length cover content; the trailing space error
+  // means the user spaced early and produced an incomplete word).
+  const wordHasError = wordMode && errors.length > 0;
+
   const renderChar = (char, index) => {
     // Check if this character has an error
     const hasError = errors.some(err => err.charIndex === index);
@@ -56,7 +64,7 @@ const WordDisplay = ({
 
     // Determine the visual state
     let textColor, bgColor = '', textDecoration = '';
-    
+
     if (theme === 'geek') {
       // Ultrathink terminal theme colors
       textColor = 'text-green-400/60'; // untyped (dimmed)
@@ -152,7 +160,7 @@ const WordDisplay = ({
       }
     }
 
-    // Add special animation class for hint
+    // Add special animation class for hint (only meaningful in char-mode dictation)
     const isHint = dictationMode && index === 0 && hasError && isCurrentWord && !isCompleted && displayChar === char;
     
     // Use fixed-width spans with consistent sizing
@@ -183,7 +191,7 @@ const WordDisplay = ({
     
     let textColor, bgColor = '';
     let displayChar = '\u00A0'; // nbsp by default
-    
+
     if (theme === 'geek') {
       // Ultrathink terminal theme for spaces
       textColor = 'text-green-400/60';
@@ -266,6 +274,93 @@ const WordDisplay = ({
       </span>
     );
   };
+
+  if (wordMode) {
+    // Word-mode rendering: each word is a single blank line that adapts to
+    // typed content. Trailing spaces (delimiter / skip-padding) are trimmed
+    // from display; overflow chars are kept so the line extends naturally.
+    const visibleTyped = typedChars.replace(/ +$/, '');
+
+    let textColor = '';
+    let lineColor;
+    if (isCompleted) {
+      if (wordHasError) {
+        textColor = theme === 'geek'
+          ? 'text-orange-400'
+          : theme === 'cyber'
+          ? 'text-fuchsia-500 text-shadow-neon-pink'
+          : 'text-red-700 dark:text-red-400';
+        lineColor = theme === 'geek'
+          ? 'border-orange-400/60'
+          : theme === 'cyber'
+          ? 'border-fuchsia-500/60'
+          : 'border-red-400 dark:border-red-500/70';
+      } else {
+        textColor = theme === 'geek'
+          ? 'text-emerald-400/40'
+          : theme === 'cyber'
+          ? 'text-cyan-700/50'
+          : 'text-gray-400 dark:text-gray-500';
+        lineColor = theme === 'geek'
+          ? 'border-emerald-400/30'
+          : theme === 'cyber'
+          ? 'border-cyan-700/40'
+          : 'border-gray-300 dark:border-gray-600';
+      }
+    } else if (isCurrentWord) {
+      textColor = theme === 'geek'
+        ? 'text-yellow-300'
+        : theme === 'cyber'
+        ? 'text-purple-400 text-shadow-neon'
+        : 'text-amber-600 dark:text-amber-400';
+      lineColor = theme === 'geek'
+        ? 'border-yellow-400/60'
+        : theme === 'cyber'
+        ? 'border-purple-400/60'
+        : 'border-amber-400 dark:border-amber-500/70';
+    } else {
+      lineColor = theme === 'geek'
+        ? 'border-green-400/40'
+        : theme === 'cyber'
+        ? 'border-cyan-600/40'
+        : 'border-gray-400 dark:border-gray-600';
+    }
+
+    return (
+      <div className="inline-block align-top mb-6 mr-3">
+        <div className="inline-block text-center" style={{ minWidth: '1.8em' }}>
+          <div
+            className={`inline-block text-xl leading-relaxed whitespace-nowrap ${textColor}`}
+            style={{ fontFamily: 'monospace' }}
+          >
+            {visibleTyped || ' '}
+            {isCurrentWord && !isCompleted && (
+              <span
+                className="inline-block w-px h-[1em] align-middle ml-px animate-pulse"
+                style={{ backgroundColor: 'currentColor' }}
+              />
+            )}
+          </div>
+          <div className={`border-b-2 ${lineColor}`} />
+        </div>
+        {showIPA && (
+          <div className="text-xs mt-2 text-center">
+            {ipa ? (
+              <span className={
+                theme === 'geek'
+                  ? 'text-green-400/80 font-mono'
+                  : theme === 'cyber'
+                  ? 'text-cyan-400 font-mono text-shadow-neon'
+                  : 'text-indigo-600 dark:text-indigo-400'
+              }>
+                {theme === 'geek' ? `[${ipa}]` : theme === 'cyber' ? `<${ipa}>` : `/${ipa}/`}
+              </span>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="inline-block align-top mb-6">

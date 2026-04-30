@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   showIPA: false,
   showReference: true,
   dictationMode: false,
+  dictationStyle: 'char', // 'char' or 'word' - sub-style of dictation mode
   showHistory: true,
   fontSize: 'medium', // 'small', 'medium', 'large'
   soundEnabled: true,

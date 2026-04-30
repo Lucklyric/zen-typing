@@ -4,7 +4,7 @@ import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { audioManager } from '../utils/audioManager';
 import { buildAlignedGroups } from '../utils/sentencePairing';
 
-const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, theme = 'normal' }) => {
+const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, dictationStyle = 'char', theme = 'normal' }) => {
   const [engine] = useState(() => new TypingEngine(text));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
@@ -87,14 +87,18 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
           let currentPos = 0;
           const newWordTypedChars = {};
           
-          // Rebuild word typed chars from engine's typed text
+          // Rebuild word typed chars from engine's typed text. Use the engine's
+          // recorded per-word char counts (which include overflow / skip padding)
+          // rather than a flat word.length stride, so leading/trailing chars
+          // don't bleed between words after cross-word backspace.
           for (let i = 0; i <= engine.currentWordIndex; i++) {
             const word = engine.words[i];
             if (i < engine.currentWordIndex) {
-              // Complete previous words
-              const wordLength = word.length + 1; // +1 for space
-              newWordTypedChars[i] = currentTypedText.slice(currentPos, currentPos + wordLength);
-              currentPos += wordLength;
+              const entry = engine.wordEndCharIndices[i];
+              const charsForWord = entry !== undefined ? entry.typed : word.length;
+              const totalForWord = charsForWord + 1; // +1 for the inter-word space
+              newWordTypedChars[i] = currentTypedText.slice(currentPos, currentPos + totalForWord);
+              currentPos += totalForWord;
             } else {
               // Current word (partial)
               newWordTypedChars[i] = currentTypedText.slice(currentPos);
@@ -106,11 +110,26 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
             ...newWordTypedChars,
             [prevWordIndex]: '' // Clear the word we left
           }));
-          
-          // Clear errors for the word we left
+
+          // Clear errors for the word we left, and re-derive errors for the
+          // destination word from the engine. Use max(restored charIndex,
+          // word.length) as the upper bound so overflow errors (positions past
+          // word.length) and skip-padding errors (positions inside word.length)
+          // are both captured.
+          let destWordStart = 0;
+          for (let i = 0; i < engine.currentWordIndex; i++) {
+            destWordStart += engine.words[i].length + 1;
+          }
+          const destWordLen = engine.words[engine.currentWordIndex].length;
+          const destWordEnd = destWordStart + Math.max(engine.currentCharIndex, destWordLen);
+          const destWordErrors = engine.errors
+            .filter(err => err.position >= destWordStart && err.position < destWordEnd)
+            .map(err => ({ charIndex: err.position - destWordStart }));
+
           setWordErrors(prev => ({
             ...prev,
-            [prevWordIndex]: []
+            [prevWordIndex]: [],
+            [engine.currentWordIndex]: destWordErrors
           }));
         } else {
           // Still in same word - remove last character
@@ -148,6 +167,108 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
         onProgressChange(0);
       }
       return;
+    }
+
+    // Word-mode: typing a non-space char beyond the current word's length
+    // extends the current word (so the line grows) instead of auto-advancing.
+    // Skipped on the LAST word so the engine's natural completion path runs.
+    if (e.key.length === 1 && e.key !== ' ' &&
+        dictationMode && dictationStyle === 'word' &&
+        engine.state !== TypingState.COMPLETED &&
+        engine.currentWordIndex < engine.words.length - 1) {
+      const currentWord = engine.getCurrentWord();
+      if (engine.currentCharIndex >= currentWord.length) {
+        const prevWordIndex = engine.currentWordIndex;
+        const prevCharIndex = engine.currentCharIndex;
+        const result = engine.recordOverflowChar(e.key);
+        if (result) {
+          setCurrentWordIndex(engine.currentWordIndex);
+          setCurrentCharIndex(engine.currentCharIndex);
+          setWordTypedChars(prev => ({
+            ...prev,
+            [prevWordIndex]: (prev[prevWordIndex] || '') + e.key
+          }));
+          setWordErrors(prev => ({
+            ...prev,
+            [prevWordIndex]: [
+              ...(prev[prevWordIndex] || []).filter(err => err.charIndex !== prevCharIndex),
+              { charIndex: prevCharIndex }
+            ]
+          }));
+          audioManager.playKeystroke(false);
+          if (onProgressChange) onProgressChange(engine.typedText.length);
+        }
+        return;
+      }
+    }
+
+    // Word-mode: pressing space mid-word (skip-advance) or while the word is
+    // in overflow (advance without recording the space as a wrong char).
+    if (e.key === ' ' &&
+        dictationMode && dictationStyle === 'word' &&
+        engine.state !== TypingState.COMPLETED) {
+      const currentWord = engine.getCurrentWord();
+      if (engine.currentCharIndex < currentWord.length) {
+        const prevWordIndex = engine.currentWordIndex;
+        const result = engine.advanceWordWithSkip();
+        if (result) {
+          setCurrentWordIndex(engine.currentWordIndex);
+          setCurrentCharIndex(engine.currentCharIndex);
+
+          // Pad the partial word's typed chars to its full length so the
+          // engine and component states stay aligned.
+          const padded = ((wordTypedChars[prevWordIndex] || '')
+            .padEnd(currentWord.length, ' ')) + ' ';
+          setWordTypedChars(prev => ({ ...prev, [prevWordIndex]: padded }));
+
+          setWordErrors(prev => ({
+            ...prev,
+            [prevWordIndex]: [
+              ...(prev[prevWordIndex] || []),
+              ...result.skippedCharIndices.map(charIndex => ({ charIndex }))
+            ]
+          }));
+
+          audioManager.playSpacebar(false);
+
+          if (onProgressChange) {
+            onProgressChange(engine.typedText.length);
+          }
+
+          if (result.isComplete) {
+            audioManager.playCompletion();
+            const finalStats = engine.getStats();
+            setStats(finalStats);
+            if (onComplete) onComplete(finalStats);
+          }
+          return;
+        }
+        // result === null (e.g. last word) — fall through so processKeystroke
+        // can mark the space as a wrong char inside the last word.
+      } else if (engine.currentCharIndex > currentWord.length &&
+                 engine.currentWordIndex < engine.words.length - 1) {
+        // Overflow → space: advance cleanly, keeping existing overflow errors
+        // on the prior word and NOT recording the space itself as wrong.
+        const prevWordIndex = engine.currentWordIndex;
+        const result = engine.advanceFromOverflow();
+        if (result) {
+          setCurrentWordIndex(engine.currentWordIndex);
+          setCurrentCharIndex(engine.currentCharIndex);
+          setWordTypedChars(prev => ({
+            ...prev,
+            [prevWordIndex]: (prev[prevWordIndex] || '') + ' '
+          }));
+          audioManager.playSpacebar(true);
+          if (onProgressChange) onProgressChange(engine.typedText.length);
+          if (result.isComplete) {
+            audioManager.playCompletion();
+            const finalStats = engine.getStats();
+            setStats(finalStats);
+            if (onComplete) onComplete(finalStats);
+          }
+          return;
+        }
+      }
     }
 
     if (e.key.length === 1) {
@@ -255,6 +376,7 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
         errors={wordErrors[wordIndex] || []}
         showIPA={showIPA}
         dictationMode={dictationMode}
+        dictationStyle={dictationStyle}
         theme={theme}
         showSpace={wordIndex < words.length - 1}
       />

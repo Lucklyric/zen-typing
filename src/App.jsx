@@ -53,6 +53,7 @@ function App() {
   const [soundEnabled, setSoundEnabled] = useState(() => settingsStorage.get('soundEnabled'));
   const [showHistory, setShowHistory] = useState(() => settingsStorage.get('showHistory'));
   const [dictationMode, setDictationMode] = useState(() => settingsStorage.get('dictationMode'));
+  const [dictationStyle, setDictationStyle] = useState(() => settingsStorage.get('dictationStyle'));
 
   // Theme preference state (new system)
   const [themePreference, setThemePreference] = useState(() => settingsStorage.get('themePreference'));
@@ -118,6 +119,7 @@ function App() {
     if (settings.showReference !== undefined) setShowReference(settings.showReference);
     if (settings.soundEnabled !== undefined) setSoundEnabled(settings.soundEnabled);
     if (settings.dictationMode !== undefined) setDictationMode(settings.dictationMode);
+    if (settings.dictationStyle !== undefined) setDictationStyle(settings.dictationStyle);
     if (settings.themePreference !== undefined) setThemePreference(settings.themePreference);
     if (settings.showHistory !== undefined) setShowHistory(settings.showHistory);
     if (settings.themeExplicitlySet !== undefined) setThemeExplicitlySet(settings.themeExplicitlySet);
@@ -483,6 +485,10 @@ function App() {
   }, [dictationMode]);
 
   useEffect(() => {
+    settingsStorage.set('dictationStyle', dictationStyle);
+  }, [dictationStyle]);
+
+  useEffect(() => {
     settingsStorage.set('showHistory', showHistory);
   }, [showHistory]);
 
@@ -525,7 +531,7 @@ function App() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [user, themePreference, themeExplicitlySet, showIPA, showReference, soundEnabled, dictationMode, showHistory, activeSection, focusMode, centerAreaHeight]);
+  }, [user, themePreference, themeExplicitlySet, showIPA, showReference, soundEnabled, dictationMode, dictationStyle, showHistory, activeSection, focusMode, centerAreaHeight]);
 
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
@@ -1334,6 +1340,8 @@ function App() {
                   triggerRef={settingsButtonRef}
                   dictationMode={dictationMode}
                   onDictationToggle={() => setDictationMode(prev => !prev)}
+                  dictationStyle={dictationStyle}
+                  onDictationStyleChange={setDictationStyle}
                   showIPA={showIPA}
                   onIPAToggle={() => setShowIPA(prev => !prev)}
                   soundEnabled={soundEnabled}
@@ -1396,6 +1404,7 @@ function App() {
                     onProgressChange={handleProgressChange}
                     showIPA={showIPA}
                     dictationMode={dictationMode}
+                    dictationStyle={dictationStyle}
                     theme={theme}
                   />
                 </div>

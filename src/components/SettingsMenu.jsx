@@ -6,6 +6,8 @@ const SettingsMenu = ({
   theme,
   dictationMode,
   onDictationToggle,
+  dictationStyle = 'char',
+  onDictationStyleChange,
   showIPA,
   onIPAToggle,
   soundEnabled,
@@ -137,6 +139,43 @@ const SettingsMenu = ({
           <div className={toggleDotClass(dictationMode)} />
         </div>
       </button>
+
+      {/* Dictation sub-style: only meaningful when dictation is on */}
+      {dictationMode && onDictationStyleChange && (
+        <div className="px-2 pb-2">
+          <div className={`px-2 py-1 text-xs ${
+            theme === 'geek'
+              ? 'text-green-400/70 font-mono'
+              : theme === 'cyber'
+              ? 'text-cyan-400/70 font-mono'
+              : 'text-gray-500 dark:text-gray-400 uppercase tracking-wide'
+          }`}>
+            {theme === 'geek' ? '// FEEDBACK.GRANULARITY' : theme === 'cyber' ? '>> FEEDBACK_GRAIN' : 'Feedback Granularity'}
+          </div>
+          <div className="flex gap-1">
+            {[
+              { value: 'char', labelNormal: 'Per-Char', labelGeek: 'CHAR' },
+              { value: 'word', labelNormal: 'Per-Word', labelGeek: 'WORD' }
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                role="menuitemradio"
+                aria-checked={dictationStyle === opt.value}
+                onClick={() => onDictationStyleChange(opt.value)}
+                className={`flex-1 px-3 py-2 rounded text-center text-sm transition-colors ${
+                  theme === 'geek'
+                    ? `font-mono ${dictationStyle === opt.value ? 'bg-green-900/50 text-green-400 border border-green-400' : 'text-green-400/70 hover:bg-green-900/30 border border-transparent'}`
+                    : theme === 'cyber'
+                    ? `font-mono ${dictationStyle === opt.value ? 'bg-cyan-900/30 text-cyan-400 border border-cyan-400 shadow-[0_0_10px_rgba(0,243,255,0.3)]' : 'text-cyan-600 hover:bg-cyan-900/20 hover:text-cyan-400 border border-transparent'}`
+                    : `${dictationStyle === opt.value ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-600' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-transparent'}`
+                }`}
+              >
+                {theme === 'geek' ? opt.labelGeek : opt.labelNormal}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={dividerClass} />
 
