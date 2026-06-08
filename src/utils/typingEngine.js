@@ -8,8 +8,11 @@ export const TypingState = {
 };
 
 export class TypingEngine {
-  constructor(text) {
+  constructor(text, options = {}) {
     this.originalText = text;
+    // When true, letter case is ignored during matching. Config (not reset
+    // state); can be reassigned live without rebuilding the engine.
+    this.ignoreCase = options.ignoreCase ?? false;
     // Empty / whitespace-only text must yield NO words. (''.split(/\s+/) returns
     // [''] — a single empty "word" — which would make isComplete() true from the
     // start and complete the engine on the first keystroke.)
@@ -89,7 +92,7 @@ export class TypingEngine {
       expectedChar = '';
     }
     
-    const isCorrect = charactersMatch(key, expectedChar);
+    const isCorrect = charactersMatch(key, expectedChar, this.ignoreCase);
 
     if (isCorrect) {
       this.correctKeystrokes++;

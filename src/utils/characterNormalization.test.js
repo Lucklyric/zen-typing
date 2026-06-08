@@ -42,6 +42,16 @@ describe('charactersMatch', () => {
     expect(charactersMatch('.', '…')).toBe(true);
   });
 
+  it('matches case-insensitively only when ignoreCase is true', () => {
+    expect(charactersMatch('a', 'A', true)).toBe(true);
+    expect(charactersMatch('A', 'a', true)).toBe(true);
+    // still distinguishes genuinely different letters
+    expect(charactersMatch('a', 'B', true)).toBe(false);
+    // default (omitted / false) stays case-sensitive
+    expect(charactersMatch('a', 'A')).toBe(false);
+    expect(charactersMatch('a', 'A', false)).toBe(false);
+  });
+
   it('normalizeCharacter leaves ordinary chars untouched', () => {
     expect(normalizeCharacter('x')).toBe('x');
     expect(normalizeCharacter(' ')).toBe(' ');

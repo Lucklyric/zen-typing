@@ -121,6 +121,22 @@ describe('TypingEngine', () => {
     });
   });
 
+  describe('ignoreCase option', () => {
+    it('counts a wrong-case keystroke as correct when ignoreCase is true', () => {
+      const e = new TypingEngine('Hi', { ignoreCase: true });
+      const r = e.processKeystroke('h'); // expected 'H'
+      expect(r.isCorrect).toBe(true);
+      expect(e.errors.length).toBe(0);
+    });
+
+    it('still flags wrong case when ignoreCase is false (default)', () => {
+      const e = new TypingEngine('Hi');
+      const r = e.processKeystroke('h'); // expected 'H'
+      expect(r.isCorrect).toBe(false);
+      expect(e.errors.length).toBe(1);
+    });
+  });
+
   describe('empty / whitespace-only text', () => {
     it('produces no words and never auto-completes', () => {
       const empty = new TypingEngine('');

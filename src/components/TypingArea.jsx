@@ -4,8 +4,8 @@ import { TypingEngine, TypingState } from '../utils/typingEngine';
 import { audioManager } from '../utils/audioManager';
 import { buildAlignedGroups } from '../utils/sentencePairing';
 
-const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, dictationStyle = 'char', theme = 'normal' }) => {
-  const [engine] = useState(() => new TypingEngine(text));
+const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, showIPA = false, dictationMode = false, dictationStyle = 'char', theme = 'normal', ignoreCase = true }) => {
+  const [engine] = useState(() => new TypingEngine(text, { ignoreCase }));
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [wordTypedChars, setWordTypedChars] = useState({});
@@ -26,6 +26,12 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
   useEffect(() => () => {
     if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
   }, []);
+
+  // Keep the engine's case sensitivity in sync with the prop so toggling the
+  // setting takes effect immediately, without remounting / restarting the run.
+  useEffect(() => {
+    engine.ignoreCase = ignoreCase;
+  }, [engine, ignoreCase]);
 
   // Lazy-load IPA dictionary when showIPA becomes true
   useEffect(() => {

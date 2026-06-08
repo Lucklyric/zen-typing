@@ -2,6 +2,11 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-06-08
+
+### Added
+- **"Ignore Capitalization" setting (on by default).** A new minor toggle in the Settings menu makes letter matching case-insensitive, so typing `h` for `H` counts as correct. Toggling it takes effect immediately mid-session (no restart), persists locally, and syncs to the cloud. Turn it off for strict case-sensitive practice. Implemented as an `ignoreCase` flag threaded through `charactersMatch` → `TypingEngine` → `TypingArea` (the matcher itself still defaults to case-sensitive).
+
 ## [0.8.0] - 2026-06-07
 
 ### Changed

@@ -25,7 +25,8 @@ const DEFAULT_SETTINGS = {
   typingMode: 'normal', // 'normal' or 'reference'
   splitRatio: 0.5, // Left panel ratio (0.2 - 0.8)
   autoSwitchReference: true, // Auto-switch to reference mode when selecting reference text
-  centerAreaHeight: 500 // Center input area height in pixels (300 - 1000)
+  centerAreaHeight: 500, // Center input area height in pixels (300 - 1000)
+  ignoreCase: true // boolean - treat typed letters as case-insensitive matches
 };
 
 // Validate themePreference value

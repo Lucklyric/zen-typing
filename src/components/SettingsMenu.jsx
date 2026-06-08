@@ -16,6 +16,8 @@ const SettingsMenu = ({
   onThemeChange,
   focusMode,
   onFocusModeToggle,
+  ignoreCase,
+  onIgnoreCaseToggle,
   onShowShortcuts,
   triggerRef
 }) => {
@@ -225,6 +227,23 @@ const SettingsMenu = ({
           </span>
           <div className={`relative ${toggleClass(focusMode)}`}>
             <div className={toggleDotClass(focusMode)} />
+          </div>
+        </button>
+      )}
+
+      {/* Ignore Case Toggle - minor matching option */}
+      {onIgnoreCaseToggle && (
+        <button
+          role="menuitem"
+          onClick={onIgnoreCaseToggle}
+          className={menuItemClass}
+        >
+          <span className="flex items-center gap-2">
+            <span>{theme === 'geek' ? (ignoreCase ? '[i]' : '[ ]') : '🔠'}</span>
+            <span>{theme === 'geek' ? 'IGNORE.CASE' : 'Ignore Capitalization'}</span>
+          </span>
+          <div className={`relative ${toggleClass(ignoreCase)}`}>
+            <div className={toggleDotClass(ignoreCase)} />
           </div>
         </button>
       )}

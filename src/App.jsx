@@ -94,6 +94,7 @@ function App() {
 
   // Focus mode state
   const [focusMode, setFocusMode] = useState(() => settingsStorage.get('focusMode'));
+  const [ignoreCase, setIgnoreCase] = useState(() => settingsStorage.get('ignoreCase'));
 
   // Track window height for responsive layout
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
@@ -128,6 +129,7 @@ function App() {
     if (settings.activeSection !== undefined) setActiveSection(settings.activeSection);
     if (settings.centerAreaHeight !== undefined) setCenterAreaHeight(settings.centerAreaHeight);
     if (settings.focusMode !== undefined) setFocusMode(settings.focusMode);
+    if (settings.ignoreCase !== undefined) setIgnoreCase(settings.ignoreCase);
   }, []);
 
   // Window resize listener
@@ -508,6 +510,10 @@ function App() {
     settingsStorage.set('centerAreaHeight', centerAreaHeight);
   }, [centerAreaHeight]);
 
+  useEffect(() => {
+    settingsStorage.set('ignoreCase', ignoreCase);
+  }, [ignoreCase]);
+
   // Sync settings to cloud when they change (debounced)
   useEffect(() => {
     if (!isSupabaseConfigured || !user) return;
@@ -535,7 +541,7 @@ function App() {
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [user, themePreference, themeExplicitlySet, showIPA, showReference, soundEnabled, dictationMode, dictationStyle, showHistory, activeSection, focusMode, centerAreaHeight]);
+  }, [user, themePreference, themeExplicitlySet, showIPA, showReference, soundEnabled, dictationMode, dictationStyle, showHistory, activeSection, focusMode, centerAreaHeight, ignoreCase]);
 
   const handleTextSelect = (textOrEntry) => {
     if (typeof textOrEntry === 'string') {
@@ -1381,6 +1387,8 @@ function App() {
                     setFocusMode(prev => !prev);
                     setSettingsMenuOpen(false);
                   }}
+                  ignoreCase={ignoreCase}
+                  onIgnoreCaseToggle={() => setIgnoreCase(prev => !prev)}
                   onShowShortcuts={() => setShowShortcutsHelp(true)}
                 />
               </div>
@@ -1431,6 +1439,7 @@ function App() {
                     dictationMode={dictationMode}
                     dictationStyle={dictationStyle}
                     theme={theme}
+                    ignoreCase={ignoreCase}
                   />
                 </div>
               </ResizableContainer>

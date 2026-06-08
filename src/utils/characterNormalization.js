@@ -27,15 +27,22 @@ export function normalizeCharacter(char) {
 // some mappings (e.g. '…' -> '...') change length. Normalize per-character at
 // compare time via charactersMatch instead.
 
-// Check if two characters should be considered equal for typing
-export function charactersMatch(typed, expected) {
+// Check if two characters should be considered equal for typing.
+// When ignoreCase is true, letters match regardless of case (default false so
+// callers — and the existing case-sensitive tests — opt in explicitly).
+export function charactersMatch(typed, expected, ignoreCase = false) {
   // Direct match
   if (typed === expected) return true;
 
   // Normalize BOTH sides so matching is symmetric: a user typing a straight
   // quote/dash/space against a curly/em/nbsp expected char matches, and vice
   // versa (e.g. typing a non-breaking space against a regular space).
-  if (normalizeCharacter(typed) === normalizeCharacter(expected)) return true;
+  const nt = normalizeCharacter(typed);
+  const ne = normalizeCharacter(expected);
+  if (nt === ne) return true;
+
+  // Case-insensitive match (opt-in): compare the normalized chars lowercased.
+  if (ignoreCase && nt.toLowerCase() === ne.toLowerCase()) return true;
 
   // Allow typing a single period for an ellipsis char (one keystroke advances
   // past the whole '…'). Kept as an explicit branch because normalizeCharacter
