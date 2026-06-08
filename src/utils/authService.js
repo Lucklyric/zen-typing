@@ -1,36 +1,62 @@
 /**
  * Auth Service
  *
- * Handles Magic Link authentication, session management, and auth state.
- * Provides a clean API for auth operations throughout the app.
+ * Handles email one-time-code (OTP) authentication, session management, and
+ * auth state. Provides a clean API for auth operations throughout the app.
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 /**
  * Auth state type
- * @typedef {'idle' | 'loading' | 'awaiting' | 'error'} AuthState
+ * @typedef {'idle' | 'loading' | 'awaiting' | 'verifying' | 'error'} AuthState
  */
 
 /**
- * Send Magic Link to email
+ * Send a 6-digit login code to the user's email.
+ *
+ * Uses the same signInWithOtp endpoint as the old magic-link flow — what the
+ * email actually contains (a code vs a link) is controlled by the Supabase
+ * "Magic Link" email template, which must include the {{ .Token }} variable.
+ *
  * @param {string} email - User's email address
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function signInWithMagicLink(email) {
+export async function sendEmailOtp(email) {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, error: 'Supabase not configured' };
   }
 
   try {
-    // Build redirect URL for Magic Link
-    // Handles both dev (localhost) and production (GitHub Pages)
-    const redirectTo = window.location.origin + (import.meta.env.BASE_URL || '/');
+    const { error } = await supabase.auth.signInWithOtp({ email });
 
-    const { error } = await supabase.auth.signInWithOtp({
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message || 'Failed to send code' };
+  }
+}
+
+/**
+ * Verify the 6-digit code the user received by email. On success this creates a
+ * session and triggers the SIGNED_IN auth-state-change event.
+ *
+ * @param {string} email - The email the code was sent to
+ * @param {string} token - The 6-digit code the user typed
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function verifyEmailOtp(email, token) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const { error } = await supabase.auth.verifyOtp({
       email,
-      options: {
-        emailRedirectTo: redirectTo,
-      },
+      token: (token || '').trim(),
+      type: 'email',
     });
 
     if (error) {
@@ -39,7 +65,7 @@ export async function signInWithMagicLink(email) {
 
     return { success: true };
   } catch (err) {
-    return { success: false, error: err.message || 'Failed to send magic link' };
+    return { success: false, error: err.message || 'Failed to verify code' };
   }
 }
 

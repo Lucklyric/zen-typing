@@ -2,6 +2,13 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-06-07
+
+### Changed
+- **Email sign-in now uses a 6-digit code instead of a magic link.** Clicking Sign In and entering an email sends a one-time code (`signInWithOtp`); a new code-entry field verifies it (`verifyOtp` with `type: 'email'`). The header "Check Email" pill became a numeric code input (OTP autofill, inline error on a wrong code) with a "Verifying…" state. `signInWithMagicLink` was renamed to `sendEmailOtp` and `verifyEmailOtp` was added.
+
+  > Requires the Supabase **Magic Link** email template to include the `{{ .Token }}` variable (the code); the previous template only contained the link.
+
 ## [0.7.2] - 2026-06-07
 
 ### Fixed

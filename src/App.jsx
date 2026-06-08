@@ -14,7 +14,8 @@ import { audioManager } from './utils/audioManager';
 import { settingsStorage } from './utils/settingsStorage';
 import { isSupabaseConfigured } from './utils/supabaseClient';
 import {
-  signInWithMagicLink,
+  sendEmailOtp,
+  verifyEmailOtp,
   signOut as authSignOut,
   onAuthStateChange,
   getSession,
@@ -99,8 +100,9 @@ function App() {
 
   // Auth state (Cloud Sync)
   const [user, setUser] = useState(null);
-  const [authState, setAuthState] = useState('idle'); // 'idle' | 'loading' | 'awaiting' | 'error'
+  const [authState, setAuthState] = useState('idle'); // 'idle' | 'loading' | 'awaiting' | 'verifying' | 'error'
   const [authError, setAuthError] = useState(null);
+  const [pendingEmail, setPendingEmail] = useState(''); // email a code was sent to, awaiting verification
   const activeUserIdRef = useRef(null); // Track active user to prevent race conditions
 
   // Sync state (Cloud Sync)
@@ -162,6 +164,7 @@ function App() {
       if (!session?.user) {
         if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
           setAuthState('idle');
+          setPendingEmail('');
           // Clear sync state BEFORE nullifying user ID to ensure user-scoped pending changes are cleared
           resetSyncState();
           activeUserIdRef.current = null;
@@ -187,6 +190,7 @@ function App() {
       // Trigger sync on SIGNED_IN (new sign-in) or INITIAL_SESSION (returning user)
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         setAuthState('idle');
+        setPendingEmail('');
 
         // Trigger migration/sync
         const userId = session.user.id;
@@ -660,15 +664,33 @@ function App() {
     setAuthState('loading');
     setAuthError(null);
 
-    const result = await signInWithMagicLink(email);
+    const result = await sendEmailOtp(email);
 
     if (result.success) {
-      setAuthState('awaiting');
+      setPendingEmail(email);
+      setAuthState('awaiting'); // now awaiting the 6-digit code
     } else {
       setAuthState('error');
       setAuthError(result.error);
     }
   }, []);
+
+  const handleVerifyCode = useCallback(async (code) => {
+    if (!pendingEmail) return;
+    setAuthState('verifying');
+    setAuthError(null);
+
+    const result = await verifyEmailOtp(pendingEmail, code);
+
+    if (result.success) {
+      // SIGNED_IN auth-state-change resets authState to 'idle' and clears pendingEmail.
+      setPendingEmail('');
+    } else {
+      // Stay on the code-entry step so the user can retry with the same code/email.
+      setAuthState('awaiting');
+      setAuthError(result.error);
+    }
+  }, [pendingEmail]);
 
   const handleSignOut = useCallback(async () => {
     const result = await authSignOut();
@@ -680,6 +702,7 @@ function App() {
   const handleAuthCancel = useCallback(() => {
     setAuthState('idle');
     setAuthError(null);
+    setPendingEmail('');
   }, []);
 
   const handleSyncRetry = useCallback(async () => {
@@ -1289,7 +1312,9 @@ function App() {
                     user={user}
                     authState={authState}
                     authError={authError}
+                    pendingEmail={pendingEmail}
                     onSignIn={handleSignIn}
+                    onVerify={handleVerifyCode}
                     onSignOut={handleSignOut}
                     onCancel={handleAuthCancel}
                   />
