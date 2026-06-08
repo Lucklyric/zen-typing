@@ -15,9 +15,16 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
   const [shakeWord, setShakeWord] = useState(null); // Track which word should shake
   const inputRef = useRef(null);
   const scrollContainerRef = useRef(null);
+  const shakeTimerRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Clear any pending shake timer on unmount so it can't fire setState on an
+  // unmounted component.
+  useEffect(() => () => {
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
   }, []);
 
   // Lazy-load IPA dictionary when showIPA becomes true
@@ -58,9 +65,35 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
       // Handle Ctrl+ArrowRight for skip word
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        if (engine.skipWord()) {
+        const prevWordIndex = engine.currentWordIndex;
+        const skippedWord = engine.getCurrentWord();
+        const result = engine.skipWord();
+        if (result) {
           setCurrentWordIndex(engine.currentWordIndex);
-          setCurrentCharIndex(0);
+          setCurrentCharIndex(engine.currentCharIndex);
+
+          // Pad the skipped word's typed chars to full length + delimiter space,
+          // matching the engine's typedText bookkeeping, and mark the skipped
+          // chars as errors so the word renders as skipped/incorrect.
+          const padded = ((wordTypedChars[prevWordIndex] || '')
+            .padEnd(skippedWord.length, ' ')) + ' ';
+          setWordTypedChars(prev => ({ ...prev, [prevWordIndex]: padded }));
+          setWordErrors(prev => ({
+            ...prev,
+            [prevWordIndex]: [
+              ...(prev[prevWordIndex] || []),
+              ...result.skippedCharIndices.map(charIndex => ({ charIndex })),
+            ],
+          }));
+
+          if (onProgressChange) onProgressChange(engine.typedText.length);
+
+          if (result.isComplete) {
+            audioManager.playCompletion();
+            const finalStats = engine.getStats();
+            setStats(finalStats);
+            if (onComplete) onComplete(finalStats);
+          }
         }
         return;
       }
@@ -112,19 +145,12 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
           }));
 
           // Clear errors for the word we left, and re-derive errors for the
-          // destination word from the engine. Use max(restored charIndex,
-          // word.length) as the upper bound so overflow errors (positions past
-          // word.length) and skip-padding errors (positions inside word.length)
-          // are both captured.
-          let destWordStart = 0;
-          for (let i = 0; i < engine.currentWordIndex; i++) {
-            destWordStart += engine.words[i].length + 1;
-          }
-          const destWordLen = engine.words[engine.currentWordIndex].length;
-          const destWordEnd = destWordStart + Math.max(engine.currentCharIndex, destWordLen);
+          // destination word from the engine. Filter by the error's recorded
+          // wordIndex (collision-safe) rather than an absolute-position range —
+          // overflow chars can share a position with the next word's start.
           const destWordErrors = engine.errors
-            .filter(err => err.position >= destWordStart && err.position < destWordEnd)
-            .map(err => ({ charIndex: err.position - destWordStart }));
+            .filter(err => err.wordIndex === engine.currentWordIndex)
+            .map(err => ({ charIndex: err.charIndex }));
 
           setWordErrors(prev => ({
             ...prev,
@@ -320,9 +346,14 @@ const TypingArea = ({ text, referenceText = '', onComplete, onProgressChange, sh
             ]
           }));
 
-          // Trigger shake animation for the error word
+          // Trigger shake animation for the error word. Reset any in-flight
+          // timer so a rapid second error doesn't get its animation cut short.
           setShakeWord(errorWordIndex);
-          setTimeout(() => setShakeWord(null), 200); // Clear after animation duration
+          if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+          shakeTimerRef.current = setTimeout(() => {
+            setShakeWord(null);
+            shakeTimerRef.current = null;
+          }, 200); // Clear after animation duration
         } else {
           // Clear error at this position if it was corrected
           let errorWordIndex = prevWordIndex;

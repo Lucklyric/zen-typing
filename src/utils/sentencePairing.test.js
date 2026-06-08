@@ -41,6 +41,68 @@ describe('splitSentences', () => {
   it('collapses runs of punctuation as one sentence ending', () => {
     expect(splitSentences('Wait?! Really.')).toEqual(['Wait?!', 'Really.']);
   });
+
+  it('does not split on periods inside decimals / versions', () => {
+    expect(splitSentences('Price is 3.14 today. Done.')).toEqual([
+      'Price is 3.14 today.',
+      'Done.',
+    ]);
+    expect(splitSentences('Use v1.2.3 now. Next.')).toEqual([
+      'Use v1.2.3 now.',
+      'Next.',
+    ]);
+  });
+
+  it('does not split on abbreviation periods', () => {
+    expect(splitSentences('Mr. Smith went home. Bye.')).toEqual([
+      'Mr. Smith went home.',
+      'Bye.',
+    ]);
+    expect(splitSentences('Use e.g. short words here. Done.')).toEqual([
+      'Use e.g. short words here.',
+      'Done.',
+    ]);
+    expect(splitSentences('The U.S.A. won. France lost.')).toEqual([
+      'The U.S.A. won.',
+      'France lost.',
+    ]);
+  });
+
+  it('does not split on URL / email periods', () => {
+    expect(splitSentences('Visit https://a.b/c now. Done.')).toEqual([
+      'Visit https://a.b/c now.',
+      'Done.',
+    ]);
+    expect(splitSentences('Email me@test.com today. Bye.')).toEqual([
+      'Email me@test.com today.',
+      'Bye.',
+    ]);
+  });
+
+  it('still ends a sentence at a real period after a lowercase word', () => {
+    expect(splitSentences('I said no. You agreed.')).toEqual([
+      'I said no.',
+      'You agreed.',
+    ]);
+  });
+});
+
+describe('splitSentences / groupWordsBySentence stay aligned', () => {
+  // Regression: the char-level splitter and the word-level grouper must produce
+  // the SAME number of sentences, or alignBySentencesExact silently misaligns.
+  const cases = [
+    'Mr. Smith arrived. He left.',
+    'Price is 3.14 now. Next sentence.',
+    'Use e.g. examples here. Done.',
+    'The U.S.A. won the match. France lost.',
+  ];
+  for (const text of cases) {
+    it(`same sentence count for: ${text}`, () => {
+      const refCount = splitSentences(text).length;
+      const groupCount = groupWordsBySentence(text.split(/\s+/)).length;
+      expect(groupCount).toBe(refCount);
+    });
+  }
 });
 
 describe('groupWordsBySentence', () => {

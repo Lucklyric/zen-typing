@@ -10,7 +10,11 @@ export const TypingState = {
 export class TypingEngine {
   constructor(text) {
     this.originalText = text;
-    this.words = text.trim().split(/\s+/);
+    // Empty / whitespace-only text must yield NO words. (''.split(/\s+/) returns
+    // [''] — a single empty "word" — which would make isComplete() true from the
+    // start and complete the engine on the first keystroke.)
+    const trimmed = (text || '').trim();
+    this.words = trimmed.length > 0 ? trimmed.split(/\s+/) : [];
     this.currentWordIndex = 0;
     this.currentCharIndex = 0;
     this.typedText = '';
@@ -58,6 +62,9 @@ export class TypingEngine {
   }
 
   processKeystroke(key) {
+    // Nothing to type — don't start or advance on empty/whitespace text.
+    if (this.words.length === 0) return null;
+
     if (this.state === TypingState.NOT_STARTED) {
       this.start();
     }
@@ -87,9 +94,13 @@ export class TypingEngine {
     if (isCorrect) {
       this.correctKeystrokes++;
     } else {
-      // Record the error at current position
+      // Record the error. Keep `position` for legacy consumers, but also tag it
+      // with (wordIndex, charIndex) — the position-free identity that survives
+      // overflow-char/next-word position collisions.
       this.errors.push({
         position: this.getAbsolutePosition(),
+        wordIndex: this.currentWordIndex,
+        charIndex: this.currentCharIndex,
         expected: expectedChar,
         typed: key,
         timestamp: Date.now()
@@ -182,14 +193,21 @@ export class TypingEngine {
       // Decrement keystroke counters for the deleted character
       if (this.keystrokes > 0) {
         this.keystrokes--;
-        // Check if the deleted character was correct (no error at this position)
-        const currentPos = this.getAbsolutePosition();
-        const hadErrorAtPos = this.errors.some(err => err.position === currentPos);
+        // Identify errors by (wordIndex, charIndex) rather than absolute position:
+        // an overflow char can share an absolute position with the next word's
+        // start, so position-based filtering could touch the wrong word's errors.
+        const cwi = this.currentWordIndex;
+        const cci = this.currentCharIndex;
+        const hadErrorAtPos = this.errors.some(
+          err => err.wordIndex === cwi && err.charIndex === cci
+        );
         if (!hadErrorAtPos && this.correctKeystrokes > 0) {
           this.correctKeystrokes--;
         }
-        // Remove errors that are being deleted
-        this.errors = this.errors.filter(err => err.position < currentPos);
+        // Remove errors at or after the cursor (the deleted char and any later).
+        this.errors = this.errors.filter(
+          err => err.wordIndex < cwi || (err.wordIndex === cwi && err.charIndex < cci)
+        );
       }
 
       return true;
@@ -203,14 +221,21 @@ export class TypingEngine {
       // Decrement keystroke counters for the deleted character
       if (this.keystrokes > 0) {
         this.keystrokes--;
-        // Check if the deleted character was correct (no error at this position)
-        const currentPos = this.getAbsolutePosition();
-        const hadErrorAtPos = this.errors.some(err => err.position === currentPos);
+        // Identify errors by (wordIndex, charIndex) rather than absolute position:
+        // an overflow char can share an absolute position with the next word's
+        // start, so position-based filtering could touch the wrong word's errors.
+        const cwi = this.currentWordIndex;
+        const cci = this.currentCharIndex;
+        const hadErrorAtPos = this.errors.some(
+          err => err.wordIndex === cwi && err.charIndex === cci
+        );
         if (!hadErrorAtPos && this.correctKeystrokes > 0) {
           this.correctKeystrokes--;
         }
-        // Remove errors that are being deleted
-        this.errors = this.errors.filter(err => err.position < currentPos);
+        // Remove errors at or after the cursor (the deleted char and any later).
+        this.errors = this.errors.filter(
+          err => err.wordIndex < cwi || (err.wordIndex === cwi && err.charIndex < cci)
+        );
       }
 
       return true;
@@ -256,6 +281,8 @@ export class TypingEngine {
     this.keystrokes++;
     this.errors.push({
       position: this.getAbsolutePosition(),
+      wordIndex: this.currentWordIndex,
+      charIndex: this.currentCharIndex,
       expected: '',
       typed: key,
       timestamp: Date.now()
@@ -281,6 +308,8 @@ export class TypingEngine {
     for (let i = startCharIndex; i < currentWord.length; i++) {
       this.errors.push({
         position: this.getAbsolutePosition(),
+        wordIndex: this.currentWordIndex,
+        charIndex: i,
         expected: currentWord[i],
         typed: '',
         timestamp: Date.now()
@@ -311,23 +340,16 @@ export class TypingEngine {
     };
   }
 
+  // Skip the rest of the current word (Ctrl+Right). Delegates to
+  // advanceWordWithSkip so it shares the exact same bookkeeping as a mid-word
+  // space-skip: remaining chars are recorded as errors AND counted as keystrokes
+  // (so WPM/accuracy aren't distorted), the timer starts if needed, and the
+  // skipped indices are returned so the UI can mark them. Returns the skip
+  // result object (truthy) on success, or false at the last word / when not
+  // typeable.
   skipWord() {
-    if (this.currentWordIndex < this.words.length - 1) {
-      // Add remaining characters of current word as placeholders to maintain consistency
-      const currentWord = this.getCurrentWord();
-      const remaining = currentWord.length - this.currentCharIndex;
-      this.typedText += ' '.repeat(remaining + 1); // +1 for word space
-      // Track the cross so a later cross-word backspace can restore the user's
-      // pre-skip position (matches the bookkeeping in processKeystroke).
-      this.wordEndCharIndices.push({
-        typed: currentWord.length,
-        restore: this.currentCharIndex
-      });
-      this.currentWordIndex++;
-      this.currentCharIndex = 0;
-      return true;
-    }
-    return false;
+    const result = this.advanceWordWithSkip();
+    return result || false;
   }
 
   start() {
@@ -353,7 +375,9 @@ export class TypingEngine {
   }
 
   isComplete() {
-    return this.currentWordIndex === this.words.length - 1 && 
+    // No words (empty/whitespace text) → never auto-completes.
+    if (this.words.length === 0) return false;
+    return this.currentWordIndex === this.words.length - 1 &&
            this.currentCharIndex >= this.getCurrentWord().length;
   }
 

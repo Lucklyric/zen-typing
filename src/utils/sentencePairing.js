@@ -9,11 +9,68 @@
 
 const SENTENCE_SPLIT_REGEX = /([^。！？.!?]*[。！？.!?]+|[^。！？.!?]+$)/g;
 
+// Capitalized abbreviations whose trailing period is part of the token, not a
+// sentence boundary. Kept case-sensitive so common lowercase words ("no.",
+// "co.") at a real sentence end are NOT mistaken for abbreviations.
+const ABBREVIATIONS = [
+  'Mr', 'Mrs', 'Ms', 'Messrs', 'Dr', 'Prof', 'Sr', 'Jr', 'St', 'Capt', 'Gen',
+  'Sen', 'Gov', 'Rev', 'Lt', 'Col', 'Mt', 'Inc', 'Ltd', 'Corp', 'Jan', 'Feb',
+  'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept', 'Oct', 'Nov', 'Dec',
+];
+const ABBREV_RE = new RegExp(`^(?:${ABBREVIATIONS.join('|')})\\.$`);
+// Dotted initialisms / Latin abbreviations: U.S., U.S.A., e.g., i.e., a.m., p.m.
+const INITIALISM_RE = /^(?:[A-Za-z]\.){2,}$/;
+const TERMINAL_PUNCT_REGEX = /[。！？.!?]+$/;
+
+// Spans whose internal . ! ? must be masked before sentence splitting so the
+// splitter doesn't break inside URLs, emails, decimals, initialisms, or
+// abbreviations. Case-sensitive (abbreviations are capitalized; URLs/emails
+// are lowercase) to avoid masking lowercase sentence-final words.
+const PROTECT_RE = new RegExp(
+  [
+    'https?:\\/\\/[^\\s]+', // URLs
+    '[^\\s@]+@[^\\s@]+\\.[^\\s@]+', // emails
+    '\\bwww\\.[^\\s]+', // www domains
+    '\\d+(?:\\.\\d+)+', // decimals / versions (3.14, 1.2.3, v1.2.3)
+    '(?:[A-Za-z]\\.){2,}', // U.S., e.g., a.m.
+    `\\b(?:${ABBREVIATIONS.join('|')})\\.`, // Mr. Dr. Inc. ...
+  ].join('|'),
+  'g'
+);
+// Private-use sentinels (U+E000..E002) — never appear in real text — used to
+// mask protected punctuation across the split, then restored afterward.
+const MASK_DOT = String.fromCharCode(0xE000);
+const MASK_BANG = String.fromCharCode(0xE001);
+const MASK_Q = String.fromCharCode(0xE002);
+const UNMASK_RE = /[]/g;
+const UNMASK_MAP = { [MASK_DOT]: '.', [MASK_BANG]: '!', [MASK_Q]: '?' };
+
+function maskProtected(text) {
+  return text.replace(PROTECT_RE, (m) =>
+    m.replace(/\./g, MASK_DOT).replace(/!/g, MASK_BANG).replace(/\?/g, MASK_Q)
+  );
+}
+function unmaskProtected(text) {
+  return text.replace(UNMASK_RE, (c) => UNMASK_MAP[c]);
+}
+
+// Whether a word token genuinely ends a sentence — false for abbreviations,
+// decimals, and dotted initialisms whose trailing period is internal. Shared by
+// groupWordsBySentence so the word-side boundaries stay consistent with the
+// char-level splitSentences boundaries (otherwise the two desync and produce
+// silently misaligned reference groups).
+function endsSentence(token) {
+  if (!TERMINAL_PUNCT_REGEX.test(token)) return false; // no terminal punct
+  if (ABBREV_RE.test(token)) return false; // "Mr." "Dr."
+  if (INITIALISM_RE.test(token)) return false; // "U.S." "e.g."
+  return true;
+}
+
 export function splitSentences(text) {
   if (typeof text !== 'string' || text.length === 0) return [];
-  const matches = text.match(SENTENCE_SPLIT_REGEX) || [];
+  const matches = maskProtected(text).match(SENTENCE_SPLIT_REGEX) || [];
   return matches
-    .map((s) => s.trim())
+    .map((s) => unmaskProtected(s).trim())
     .filter((s) => s.length > 0);
 }
 
@@ -36,11 +93,11 @@ export function pairSentences(referenceText, typingText) {
   return refs.map((reference, i) => ({ reference, typing: typings[i] }));
 }
 
-const TERMINAL_PUNCT_REGEX = /[。！？.!?]+$/;
-
 /**
  * Group a flat word list into sentence-sized buckets, splitting at any word
- * whose trailing characters are sentence-terminal punctuation.
+ * that genuinely ends a sentence. Uses the same endsSentence() predicate as the
+ * char-level splitSentences so the two stay aligned (abbreviations, decimals,
+ * and initialisms don't create spurious boundaries on one side only).
  *
  * @param {string[]} words
  * @returns {string[][]} groups, each an array of words for one sentence
@@ -52,7 +109,7 @@ export function groupWordsBySentence(words) {
   let current = [];
   for (const word of words) {
     current.push(word);
-    if (TERMINAL_PUNCT_REGEX.test(word)) {
+    if (endsSentence(word)) {
       groups.push(current);
       current = [];
     }

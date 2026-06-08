@@ -2,6 +2,20 @@
 
 All notable changes to Zen Typing are documented in this file. The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and this project uses [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-06-07
+
+### Fixed
+- **Sentence splitting broke on periods inside decimals, versions, abbreviations, URLs, and emails.** `splitSentences` treated every `.` as a sentence end, so `"Price is 3.14. Next."` split into `3.` / `14.` / `Next.`, and `"Mr. Smith arrived."` / `"v1.2.3"` / `"https://a.b/c"` / `"me@test.com"` all fragmented. These spans are now mask-protected across the split. `groupWordsBySentence` shares the same `endsSentence()` predicate as `splitSentences`, so the reference side and word side stay aligned — fixing a case where the wrong reference sentence rendered above the wrong words.
+- **Character matching was asymmetric.** `charactersMatch` only normalized the *expected* side, so typing a real apostrophe/dash, or a regular vs non-breaking space, against the curly/em/nbsp counterpart was wrongly flagged. Both sides are normalized now (case sensitivity intentionally preserved).
+- **Empty / whitespace-only text produced an unusable engine** that reported complete on the first keystroke. Such text now yields no words and never auto-completes.
+- **Word-mode overflow corrupted backspace bookkeeping.** An overflow character's absolute position could collide with the next word's start, so cross-word backspace mis-counted keystrokes and removed the wrong error. Errors now carry a collision-safe `(wordIndex, charIndex)` identity.
+- **`Ctrl+→` skip was inconsistent with space-skip.** It padded the text without counting keystrokes or recording errors (inflating WPM, 100% accuracy, no error styling), while space-skip counted every padded char. Both paths now behave identically: skipped characters count as errors, the timer starts, and the skipped word renders as incorrect.
+- **IPA lookup missed words wrapped in punctuation.** `getIPA` now strips surrounding brackets/quotes/punctuation while keeping internal apostrophes and hyphens, so `"don't"`, `"well-known"`, and `"(hello)"` resolve.
+- **Shake animation could be cut short or leak.** The error-shake timer is now tracked in a ref, reset on rapid successive errors, and cleared on unmount.
+
+### Removed
+- Unused `normalizeText` export (its `…` → `...` expansion changed string length and could desync engine position tracking if ever called).
+
 ## [0.6.5] - 2026-04-20
 
 ### Fixed

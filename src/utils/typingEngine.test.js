@@ -101,5 +101,56 @@ describe('TypingEngine', () => {
       const result = engine.skipWord();
       expect(result).toBe(false);
     });
+
+    it('records skipped chars as errors and counts them as keystrokes', () => {
+      // Skipping "Hello" (5 chars) from the start should register 5 errors and
+      // 6 keystrokes (5 skipped + 1 delimiter space), not a free 100% pass.
+      const result = engine.skipWord();
+      expect(result.skippedCharIndices).toEqual([0, 1, 2, 3, 4]);
+      expect(engine.errors.length).toBe(5);
+      expect(engine.keystrokes).toBe(6);
+      expect(engine.correctKeystrokes).toBe(1); // the delimiter space
+      // typedText length stays in lockstep with keystrokes (no WPM inflation).
+      expect(engine.typedText.length).toBe(engine.keystrokes);
+    });
+
+    it('starts the timer when skipping before any typing', () => {
+      engine.skipWord();
+      expect(engine.state).toBe(TypingState.IN_PROGRESS);
+      expect(engine.startTime).not.toBeNull();
+    });
+  });
+
+  describe('empty / whitespace-only text', () => {
+    it('produces no words and never auto-completes', () => {
+      const empty = new TypingEngine('');
+      expect(empty.words).toEqual([]);
+      expect(empty.isComplete()).toBe(false);
+    });
+
+    it('ignores keystrokes instead of completing on the first one', () => {
+      const ws = new TypingEngine('   ');
+      expect(ws.words).toEqual([]);
+      const result = ws.processKeystroke('a');
+      expect(result).toBeNull();
+      expect(ws.state).toBe(TypingState.NOT_STARTED);
+    });
+  });
+
+  describe('word-mode overflow + backspace bookkeeping', () => {
+    it('attributes overflow errors to the right word after cross-word backspace', () => {
+      // text "ab cd": type "ab" + two overflow chars "XY", advance, then come
+      // back. Overflow positions (2,3) collide with word 2's start position (3)
+      // in absolute coords; (wordIndex,charIndex) identity keeps them on word 0.
+      const e = new TypingEngine('ab cd');
+      e.processKeystroke('a');
+      e.processKeystroke('b');
+      e.recordOverflowChar('X'); // charIndex 2 (overflow)
+      e.recordOverflowChar('Y'); // charIndex 3 (overflow)
+      const overflowErrs = e.errors.filter((er) => er.wordIndex === 0);
+      expect(overflowErrs.map((er) => er.charIndex)).toEqual([2, 3]);
+      // No overflow error should be misattributed to word 1.
+      expect(e.errors.some((er) => er.wordIndex === 1)).toBe(false);
+    });
   });
 });

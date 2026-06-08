@@ -117644,8 +117644,20 @@ const manualAdditions = {
 // Function to get IPA pronunciation for a word
 export function getIPA(word) {
   if (!word) return null;
-  const normalized = word.toLowerCase().replace(/[.,!?;:'"]/g, '');
-  return cmuIpaDict[normalized] || manualAdditions[normalized] || null;
+  const lower = word.toLowerCase();
+  // Try in order:
+  //  1. strip only SURROUNDING non-alphanumerics (parens, brackets, quotes,
+  //     dashes, trailing punctuation) while keeping internal apostrophes and
+  //     hyphens — so "don't", "well-known", "(hello)" all resolve.
+  //  2. fall back to the aggressive strip of .,!?;:'" anywhere (legacy behavior).
+  const trimmed = lower.replace(/^[^a-z0-9]+/, '').replace(/[^a-z0-9]+$/, '');
+  const stripped = trimmed.replace(/[.,!?;:'"]/g, '');
+  for (const key of [trimmed, stripped]) {
+    if (key && (cmuIpaDict[key] || manualAdditions[key])) {
+      return cmuIpaDict[key] || manualAdditions[key];
+    }
+  }
+  return null;
 }
 
 // Get dictionary size
